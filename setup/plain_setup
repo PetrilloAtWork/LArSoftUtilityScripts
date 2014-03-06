@@ -73,63 +73,67 @@ declare local_setup_experiment="$4"
 local_setup_qual="$(SortUPSqualifiers "${local_setup_qual//_/:}")"
 unset -f SortUPSqualifiers
 
-# find which local product setup script to source
-declare local_setup_spec="${local_setup_version}_${local_setup_qual//:/_}"
-declare local_setup_script="localProducts_${MRB_PROJECT:-"larsoft"}_${local_setup_spec}/setup"
-[[ ! -r "$local_setup_script" ]] && [[ -r "localProd/setup" ]] && local_setup_script="localProd/setup"
-[[ ! -r "$local_setup_script" ]] && [[ -r "localProducts/setup" ]] && local_setup_script="localProducts/setup"
-if [[ ! -r "$local_setup_script" ]]; then
-	while : ; do
-		for local_setup_script in localProducts_larsoft_*/setup ; do
-			if [[ -x "$local_setup_script" ]]; then
-				# cheat: peek which versions this setup sets up
-				read local_setup_version local_setup_qual <<< "$(
-					source "$local_setup_script" >& /dev/null
-					echo "${MRB_PROJECT_VERSION} ${MRB_QUAL}"
-				)"
-				break 2
-			fi
-		done
-		# restore the value for error messages
-		local_setup_script="localProducts_larsoft_${local_setup_spec}/setup"
-		break
-	done # fake loop
-fi
-
-if [[ -z "$local_setup_version" ]]; then
-	echo "I don't know which LArSoft version to set up!" >&2
-	return 1
-fi
-
-declare -i local_setup_nOutput=0
-
 case "$local_setup_mode" in
 	( 'base' )
 		###
 		### base set up (UPS, MRB, git)
 		###
 		declare -i local_setup_nErrors=0
+		declare local_setup_base_script
+		[[ -d "/grid/fermiapp" ]] && local_setup_base_type="local"
 		case "$local_setup_experiment" in
 			( 'MicroBooNE' )
 				# MicroBooNE setup adds to the above a specific UPS repository
 				echo " * MicroBooNE specific setup"
-			#	source "/grid/fermiapp/uboone/software/setup_uboone.sh" || let ++local_setup_nErrors
-				source "/grid/fermiapp/products/uboone/setup_uboone.sh" || let ++local_setup_nErrors
+			#	local_setup_base_script="/grid/fermiapp/uboone/software/setup_uboone.sh"
+				local_setup_base_script="/grid/fermiapp/products/uboone/setup_uboone.sh"
+				if [[ -r "$local_setup_base_script" ]]; then
+					source "$local_setup_base_script" || let ++local_setup_nErrors
+				else
+					echo "    base setup script '${local_setup_base_script}' not available -- using local setup."
+					local_setup_base_script=":golocal:"
+				fi
 				;;
 			( 'LBNE' )
 				echo " * LBNE specific setup"
-				source "/grid/fermiapp/lbne/software/setup_lbne.sh" || let ++local_setup_nErrors
+				local_setup_base_script="/grid/fermiapp/lbne/software/setup_lbne.sh"
+				if [[ -r "$local_setup_base_script" ]]; then
+					source "$local_setup_base_script" || let ++local_setup_nErrors
+				else
+					echo "    base setup script '${local_setup_base_script}' not available -- using local setup."
+					local_setup_base_script=":golocal:"
+				fi
 				;;
 			( * )
 				# this is experiment-agnostic setup:
 				echo " * generic LArSoft setup"
-				source /grid/fermiapp/products/larsoft/setup || let ++local_setup_nErrors
-				setup git || let ++local_setup_nErrors
-				setup gitflow || let ++local_setup_nErrors
-				setup mrb || let ++local_setup_nErrors
-				export MRB_PROJECT=larsoft
+				local_setup_base_script="/grid/fermiapp/products/larsoft/setup"
+				if [[ -r "$local_setup_base_script" ]]; then
+					source "$local_setup_base_script" || let ++local_setup_nErrors
+					setup git || let ++local_setup_nErrors
+					setup gitflow || let ++local_setup_nErrors
+					setup mrb || let ++local_setup_nErrors
+					export MRB_PROJECT=larsoft
+				else
+					echo "    base setup script '${local_setup_base_script}' not available -- using local setup."
+					local_setup_base_script=":golocal:"
+				fi
 				;;
 		esac
+		if [[ "$local_setup_base_script" == ":golocal:" ]]; then
+			# this is experiment-agnostic setup:
+			echo " * local LArSoft setup"
+			# hope "Setup UPS_local" means something in your system...
+			let ++local_setup_nOutput
+			Setup UPS_local  >& >(sed -e "s/^/    [${local_setup_nOutput}> /")
+			if ! which git >& /dev//null ; then
+				setup git || let ++local_setup_nErrors
+				setup gitflow || let ++local_setup_nErrors
+			fi
+			setup mrb || let ++local_setup_nErrors
+			export MRB_PROJECT=larsoft
+		fi
+		unset local_setup_base_script
 		if [[ $local_setup_nErrors -gt 0 ]]; then
 			unset local_setup_nErrors
 			return 1

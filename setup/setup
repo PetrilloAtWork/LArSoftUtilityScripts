@@ -49,12 +49,16 @@ function local_setup_element() {
 ###
 
 declare -a local_setup_autodetection
-if type autodetectLArSoft.sh >& /dev/null ; then
-	local_setup_autodetection=( $(autodetectLArSoft.sh "nightly" "debug:e4" "LArSoft") )
+declare local_setup_autodetection_script="$(which 'autodetectLArSoft.sh' >& /dev/null)"
+[[ -x "$local_setup_autodetection_script" ]] || local_setup_autodetection_script="${local_scriptdir}/autodetectLArSoft.sh"
+[[ -x "$local_setup_autodetection_script" ]] || local_setup_autodetection_script="$(dirname "$local_scriptdir")/autodetectLArSoft.sh"
+if [[ -x "$local_setup_autodetection_script" ]] ; then
+	local_setup_autodetection=( $("$local_setup_autodetection_script" "nightly" "debug:e4" "LArSoft") )
 else
 	echo "Autodetection skipped." >&2
 	local_setup_autodetection=( "" "debug:e4" "LArSoft" )
 fi
+unset local_setup_autodetection_script
 
 ###
 ### Override by the command line parameters
@@ -79,7 +83,7 @@ unset -f SortUPSqualifiers
 ###
 ### if not sourced, just print what would happen
 ###
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "$(basename "${BASH_SOURCE[0]}")" == "$(basename "$0")" ]]; then
 	
 	declare local_setup_script="$(local_setup_element 'printlocalproductsscript')"
 	
