@@ -1,127 +1,161 @@
 #!/bin/bash
 #
-# This sets up the specified version and working area.
-# Source directory stays the same
-# (meaning that we should not really play with the version number too much)
-# but the build directory is changed to reflect the quality flags.
+# This sets up a MRB working area for LArSoft, according to the specified mode.
+# 
+# Usage:
+# 
+# [source] setup [mode [version [qualifiers [experiment]]]]
+# 
+# Mode can be:
+# - 'base': very basic setup: UPS, MRB, git
+# - 'prod': production run setup, to run code from official UPS repository
+# - 'runtime': run setup, to run code from a developement-like area
+# - 'develop': development setup, to compile/install in the developement area
+# - 'all': full development setup, to develop and run in the same area
 #
 
-###
-### general setup script
-### look for which experiment we are working for, and use their setup script;
-### if can't detect the experiment, use a generic setup script
-###
-declare local_setup_basedir
-while true ; do # fake loop
-	for local_setup_basedir in "$(pwd)" "$(dirname "$BASH_SOURCE")" ; do
-		case "$local_setup_basedir" in
-			( *'/MicroBooNE/'* | *'/uboone/'* )
-				# MicroBooNE setup adds to the above a specific UPS repository
-				echo "MicroBooNE specific setup"
-				source "/grid/fermiapp/uboone/software/setup_uboone.sh"
-				break 2
-				;;
-			( *'/LBNE/'* | *'/lbne/'* )
-				echo "LBNE specific setup"
-				source "/grid/fermiapp/lbne/software/setup_lbne.sh"
-				break 2
-				;;
-		esac
-	done # for
-	
-	# this is experiment-agnostic setup, in case no setup has been performed yet
-	echo "Generic LArSoft setup"
-	source /grid/fermiapp/products/larsoft/setup
-	setup git
-	setup gitflow
-	setup mrb
-	export MRB_PROJECT=larsoft
-	break
-done # while
-
-###
-### determine version and qualifiers
-### from parameters, script name and execution path
-###
-declare local_setup_version
-declare local_setup_qual
-if [[ -n "$2" ]]; then
-	local_setup_qual="${2#_}"
-	local_setup_qual="${local_setup_qual//:/_}"
-elif [[ "$local_setup_qual" == "${local_setup_qual#setup_}" ]]; then
-	# find the version in the current path
-	for local_setup_basedir in "$(pwd)" "$(dirname "$BASH_SOURCE")" ; do
-		local_setup_qual="" # set to the directory following the version in the path
-		while [[ "$local_setup_basedir" != "/" ]] && [[ "$local_setup_basedir" != "." ]]; do
-			local_setup_version="$(basename "$local_setup_basedir")"
-		#	echo "Considering: '${local_setup_version}' ('${local_setup_basedir}')"
-			[[ "$local_setup_version" =~ 'v[[:digit:]]+_[[:digit:]]{2}_[[:digit:]]{2}$' ]] && break 2
-			if [[ -h "$local_setup_basedir" ]]; then
-				local_setup_version="$(basename "$(readlink "$local_setup_basedir")")"
-			#	echo "  link: considering also: '${local_setup_version}' ('${local_setup_basedir}')"
-				[[ "$local_setup_version" =~ 'v[[:digit:]]+_[[:digit:]]{2}_[[:digit:]]{2}$' ]] && break 2
-			fi
-			local_setup_qual="$(basename "$local_setup_basedir")"
-			local_setup_basedir="$(dirname "$local_setup_basedir")"
-		done
-		local_setup_version=""
-		local_setup_qual="" # no found version => no qualifiers either
+function SortUPSqualifiers() {
+	# Usage:  SortUPSqualifiers  Qualifiers [Separator]
+	# sorts the specified qualifiers (colon separated by default)
+	local qual="$1"
+	local sep="${2:-":"}"
+	local item
+	local -i nItems=0
+	for item in $(tr "$sep" '\n' <<< "$qual" | sort) ; do
+		[[ "$((nItems++))" == 0 ]] || echo -n "$sep"
+		echo -n "$item"
 	done
-else
-	local_setup_qual="${local_setup_qual#setup_}"
+	echo
+	return 0
+} # SortUPSqualifiers()
+
+
+################################################################################
+###
+### find the elemental setup script; without it we are lost
+###
+declare local_scriptdir="$(dirname "$(readlink -f "${BASH_SOURCE:-$0}")")"
+if [[ ! -f "${local_scriptdir}/plain_setup" ]]; then
+	echo "Can't find the elemental setup script '${local_scriptdir}/plain_setup', no setup is possible." >&2
+	return 2
 fi
-: ${local_setup_version:="${1:-"v0_02_01"}"}
-: ${local_setup_qual:="e4:prof"}
-declare local_setup_spec="${local_setup_version}${local_setup_qual:+"_${local_setup_qual//:/_}"}"
+
+function local_setup_element() {
+	source "${local_scriptdir}/plain_setup" "$1" "$local_setup_version" "$local_setup_qual" "$local_setup_experiment"
+}
 
 ###
-### regular setup
-### needed for both building and running code
+### Autodetection of the working area features
 ###
-declare local_setup_script="builds/${local_setup_spec}/localProducts_larsoft_${local_setup_spec}/setup"
-[[ ! -r "$local_setup_script" ]] && [[ -r "localProd/setup" ]] && local_setup_script="localProd/setup"
-if [[ -r "$local_setup_script" ]]; then
-	echo "Picking setup from: '$(readlink -f "${local_setup_script}")'"
-	source "$local_setup_script"
+
+declare -a local_setup_autodetection
+if type autodetectLArSoft.sh >& /dev/null ; then
+	local_setup_autodetection=( $(autodetectLArSoft.sh "nightly" "debug:e4" "LArSoft") )
+else
+	echo "Autodetection skipped." >&2
+	local_setup_autodetection=( "" "debug:e4" "LArSoft" )
+fi
+
+###
+### Override by the command line parameters
+###
+declare local_setup_mode="$(tr '[:upper:]' '[:lower:]' <<< "${1:-all}")"
+case "$local_setup_mode" in
+	( 'base' | 'develop' | 'runtime' | 'all' ) ;;
+	( * ) local_setup_mode='all' ;;
+esac
+
+declare local_setup_version="${2:-${local_setup_autodetection[0]}}"
+declare local_setup_qual="${3:-${local_setup_autodetection[1]}}"
+declare local_setup_experiment="${4:-${local_setup_autodetection[2]}}"
+unset local_setup_autodetection
+
+###
+### fill in the needed parameters
+###
+local_setup_qual="$(SortUPSqualifiers "${local_setup_qual//_/:}")"
+unset -f SortUPSqualifiers
+
+###
+### if not sourced, just print what would happen
+###
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	
-	# if we could not figure out which version we are working on,
-	# we ask MBR, which probably will have already
-	[[ -z "$local_setup_version" ]] && local_setup_version="$MRB_PROJECT_VERSION"
-	[[ -z "$local_setup_qual" ]] && [[ -n "$local_setup_version" ]] && [[ "$local_setup_version" == "$MRB_PROJECT_VERSION" ]] && local_setup_qual="$MRB_QUALS"
+	declare local_setup_script="$(local_setup_element 'printlocalproductsscript')"
 	
-	if [[ -n "$local_setup_version" ]]; then
-		echo "Setting up LArSoft ${local_setup_version}${local_setup_qual:+" (${local_setup_qual//_/:})"} from UPS"
-		setup larsoft "$local_setup_version" ${local_setup_qual:+-q  "${local_setup_qual//_/:}"}
-		echo "  (at dir: '${LARSOFT_DIR}')"
-	fi
-else
-	echo "ERROR: no ${local_setup_script} found. Setup is incomplete." >&2
+	cat <<-EOM
+	Setup type:           ${local_setup_mode}
+	Experiment:           ${local_setup_experiment}
+	LArSoft version:      ${local_setup_version}
+	LArSoft qualifiers:   ${local_setup_qual}
+	Local product setup: '${local_setup_script}'
+	EOM
+	
+	echo "This script needs to be sourced." >&2
+	exit 1
 fi
 
-###
-### setup from source directory
-### needed only if building code
-###
-declare local_setup_build_script="srcs/setEnv"
-if [[ -r "$local_setup_build_script" ]]; then
-	source mrb setEnv
-else
-	echo "ERROR: no ${local_setup_build_script} found. Setup is incomplete (still, runtime should work)." >&2
+if [[ -z "$local_setup_version" ]]; then
+	echo "I don't know which LArSoft version to set up!" >&2
+	return 1
 fi
 
-# add our scripts directory to the path, if present
-for local_setup_scriptsdir in "scripts" "$(dirname "$local_setup_script")/scripts" "${local_setup_basedir}/scripts" ; do
-	[[ -d "scripts" ]] || continue
-	if which dropit >& /dev/null ; then
-		PATH="$(dropit -eSDs "$(pwd)/scripts")"
-	else
-		PATH="${PATH}:$(pwd)/scripts"
-	fi
-	export PATH
-	break
-done
+
+declare -i local_setup_myErrors=0
+
+# this will be used, if present, by the elemental setup script
+declare -i local_setup_nOutput=0
 
 ###
-### clean the environment!
+### base setup (all modes)
 ###
-unset local_setup_basedir local_setup_version local_setup_qual local_setup_spec local_setup_script local_setup_build_script local_setup_scriptsdir
+case "$local_setup_mode" in
+	( 'base' | 'runtime' | 'develop' | 'prod' | 'all' )
+		local_setup_element 'base' || let ++local_setup_myErrors
+		;;
+	( * ) ;;
+esac
+
+###
+### local products UPS setup (all modes except base)
+###
+case "$local_setup_mode" in
+	( 'runtime' | 'develop' | 'all' )
+		local_setup_element 'localproducts' || let ++local_setup_myErrors
+		;;
+	( * ) ;;
+esac
+
+###
+### LArSoft setup (runtime and "all" modes)
+###
+case "$local_setup_mode" in
+	( 'runtime' | 'prod' | 'all' )
+		local_setup_element 'larsoft' || let ++local_setup_myErrors
+		;;
+	( * ) ;;
+esac
+
+###
+### build environment setup
+###
+case "$local_setup_mode" in
+	( 'develop' | 'all' )
+		local_setup_element 'build' || let ++local_setup_myErrors
+		;;
+	( * ) ;;
+esac
+
+
+###
+### wrap up, clean and say goodbye
+###
+unset -f local_setup_element
+if [[ $local_setup_myErrors -gt 0 ]]; then
+	echo "Set up (${local_setup_mode}) incomplete."
+	unset local_setup_mode local_setup_myErrors
+	return 1
+fi
+echo "Set up (${local_setup_mode}) complete."
+unset local_setup_mode local_setup_myErrors
+return 0
