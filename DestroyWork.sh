@@ -153,7 +153,7 @@ for Spec in "${Specs[@]}" ; do
 			
 			for (( iPadding="$Padding" ; iPadding >= "${#iVolume}" ; --iPadding )); do
 				VolumeBaseName="${SpecDir}/${BaseName}-$(printf "%0*d" "$iPadding" "$iVolume")"
-				if [[ -d "${VolumeBaseName}_workdir" ]] || [[ -f "${VolumeBaseName}.log" ]]; then
+				if [[ -d "${VolumeBaseName}" ]] || [[ -f "${VolumeBaseName}.log" ]]; then
 					IsInList Dirs "$VolumeBaseName" || Dirs[NDirs++]="$VolumeBaseName"
 					break
 				fi
@@ -194,7 +194,7 @@ for (( iDir = 0 ; iDir < NDirs ; ++iDir )); do
 		let ++nErrors
 	fi
 	
-	Target="${Area}_workdir"
+	Target="$Area"
 	if [[ ! -e "$Target" ]]; then
 		ERROR "'${Target}' does not exist."
 		let ++nErrors

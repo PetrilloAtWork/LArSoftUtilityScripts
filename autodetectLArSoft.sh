@@ -15,23 +15,21 @@ declare SCRIPTNAME="$(basename "$0")"
 
 function help() {
 	cat <<-EOH
-	Creates a working area based on a production release (no MRB).
+	Creates a workikng area based on a production release (no MRB).
 	
 	Usage:  ${SCRIPTNAME} [options] [version [qualifiers [experiment]]]
 	
 	The three arguments specify a default value if autodetection fails.
 	
 	Options [defaults in brackets]:
-	--version , -v
+	--version
 	    prints the version
-	--qualifiers , -q
-	    prints the qualifiers (colon separated)
-	--experiment , -e
+	--qualifiers
+	    prints the qualifiers
+	--experiment
 	    prints the experiment
-	--upssetup , --ups , -u
+	--ups
 	    prints version and qualifiers in UPS setup format
-	--localprod , -l
-	    prints version and qualifiers like in the localProducts directory name
 	EOH
 } # help()
 
@@ -123,14 +121,11 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 		case "$Param" in
 			( '--help' | '-h' | '-?' ) DoHelp=1  ;;
 			
-			( '--version' | '-v' )            Format="${Format:+"${Format}\\n"}%V" ;;
-			( '--qualifiers' | '-q' )         Format="${Format:+"${Format}\\n"}%Q" ;;
-			( '--experiment' | '-e' )         Format="${Format:+"${Format}\\n"}%E" ;;
-			( '--ups' | '--upssetup' | '-u' ) Format="${Format:+"${Format}\\n"}%V -q %q" ;;
-			( '--localprod' | '-l' )          Format="${Format:+"${Format}\\n"}%V_%Q" ;;
+			( '--version' | '-v' )    Format="${Format:+"${Format}\n"}%V" ;;
+			( '--qualifiers' | '-q' ) Format="${Format:+"${Format}\n"}%Q" ;;
+			( '--experiment' | '-e' ) Format="${Format:+"${Format}\n"}%E" ;;
+			( '--ups' | '--upssetup' | '-u' ) Format="${Format:+"${Format}\n"}%V -q %Q" ;;
 			
-			( '--format='* )                  Format="${Format:+"${Format}\\n"}${Param#--format=}" ;;
-			( '-f' ) let ++iParam;            Format="${Format:+"${Format}\\n"}${!iParam}" ;;
 			### other stuff
 			( '-' | '--' )
 				NoMoreOptions=1
@@ -273,12 +268,9 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$Experiment")" in
 		;;
 esac
 
-LArSoftQualifiers="${LArSoftQualifiers//_/:}"
-
 declare Output="$Format"
 Output="$(sed -e "s/\(^\|[^%]\)%V/\1${LArSoftVersion}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^%]\)%q/\1${LArSoftQualifiers//_/:}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^%]\)%Q/\1${LArSoftQualifiers//:/_}/g" <<< "$Output")"
+Output="$(sed -e "s/\(^\|[^%]\)%Q/\1${LArSoftQualifiers}/g" <<< "$Output")"
 Output="$(sed -e "s/\(^\|[^%]\)%E/\1${Experiment}/g" <<< "$Output")"
 Output="$(sed -e "s/%%/%/g" <<< "$Output")"
 printf "$Output"

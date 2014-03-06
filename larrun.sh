@@ -14,6 +14,8 @@
 SCRIPTNAME="$(basename "$0")"
 SCRIPTVERSION="1.1"
 
+DATETAG="$(datetag)"
+
 # this is the maximum number of logs that we allow; negative will allow any,
 # but it's better to leave it to a reasonably large value to avoid infinite
 # loops in case of problems or bugs
@@ -160,23 +162,35 @@ function IsInList() {
 } # IsInList()
 
 
-function FindNextLogFile() {
-	# Prints the next available log file with the specified base name
-	# The log path is in the form:
-	# logs/Date/ConfigBaseName-##.fcl
-	local ConfigBaseName="${1%".fcl"}"
-	local -i IndexPadding="${2:-2}"
+function FindNextFile() {
+	# Prints the next available log file with the specified base name and suffix
+	local BasePath="$1"
+	local Suffix="$2"
+	local -i IndexPadding="${3:-2}"
+	local -i MaxIndex="${4:-"100"}"
 	
-	local LogDir="logs/$(datetag)"
+	local BaseName="$(basename "$BasePath")"
+	local Dir="$(dirname "$BasePath")"
 	local -i Index=0
-	local LogPath
+	local Path
 	for (( Index = 0 ; Index != $MAXLOGS ; ++Index)); do
-		LogPath="${LogDir}/${ConfigBaseName}-$(printf "%0*d" "$IndexPadding" "$Index").log"
-		[[ -r "$LogPath" ]] && continue
-		echo "$LogPath"
+		Path="${Dir}/${BaseName}-$(printf "%0*d" "$IndexPadding" "$Index")${Suffix}"
+		[[ -r "$Path" ]] && continue
+		echo "$Path"
 		return 0
 	done
 	return 1
+} # FindNextFile()
+
+
+function FindNextLogFile() {
+	# Prints the next available log file with the specified base name
+	# The log path is in the form:
+	# logs/ConfigBaseName_Date-##.fcl
+	local ConfigBaseName="${1%".fcl"}"
+	local -i IndexPadding="${2:-2}"
+	
+	FindNextFile "logs/${ConfigBaseName}/${DATETAG}" '.log' "$IndexPadding" $MAXLOGS
 } # FindNextLogFile()
 
 
@@ -623,7 +637,7 @@ declare LogPath
 LogPath="$(FindNextLogFile "$JobBaseName")"
 LASTFATAL "Failed to find a suitable log file name for ${JobBaseName}!"
 
-declare JobName="$(basename "${LogPath%.log}")"
+declare JobName="${JobBaseName}-$(basename "${LogPath%.log}")"
 
 # make sure we can freely overwrite the log files:
 set +o noclobber
@@ -643,12 +657,18 @@ declare AbsoluteLogPath="$(readlink -f "$LogPath")"
 #
 if isFlagSet SANDBOX ; then
 # 	declare WorkDir="$(mktemp -d "workdir_${JobName}_XXXXXX" )"
-	declare WorkDir="${LogPath%.log}_workdir"
+	declare WorkDir="${LogPath%.log}"
 	mkdir -p "$WorkDir"
 	
 	# we need to make the config path absolute;
 	# in alternative, we could specify a command line parameter
 # 	[[ -r "$ConfigFile" ]] && ConfigPath="$(readlink -f "$ConfigFile")"
+	
+	# we want the actual log file to be in the sandbox;
+	# for convenience, it will be linked by the one outside the box
+	declare RealLogPath="${WorkDir}/${JobName}.log"
+	mv "$LogPath" "$RealLogPath"
+	ln -s "$(basename "$WorkDir")/$(basename "$RealLogPath")" "$LogPath"
 	
 	# instead, we copy the configuration file in the working area;
 	# this helps keeping track of what was actually used
