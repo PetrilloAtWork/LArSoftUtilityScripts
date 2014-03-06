@@ -1,0 +1,181 @@
+#!/bin/bash
+#
+# This sets up a "standard" version of larsoft.
+# It includes MRB, runtime and developement.
+#
+
+function SortUPSqualifiers() {
+	# Usage:  SortUPSqualifiers  Qualifiers [Separator]
+	# sorts the specified qualifiers (colon separated by default)
+	local qual="$1"
+	local sep="${2:-":"}"
+	local item
+	local -i nItems=0
+	for item in $(tr "$sep" '\n' <<< "$qual" | sort) ; do
+		[[ "$((nItems++))" == 0 ]] || echo -n "$sep"
+		echo -n "$item"
+	done
+	echo
+	return 0
+} # SortUPSqualifiers()
+
+
+################################################################################
+declare local_scriptdir="$(dirname "$(readlink -f "${BASH_SOURCE:-$0}")")"
+
+declare -a local_setup_autodetection
+if type autodetectLArSoft.sh >& /dev/null ; then
+	local_setup_autodetection=( $(autodetectLArSoft.sh "nightly" "debug:e4" "LArSoft") )
+else
+	echo "Autodetection skipped." >&2
+	local_setup_autodetection=( "" "debug:e4" "LArSoft" )
+fi
+
+declare local_setup_version="${1:-${local_setup_autodetection[0]}}"
+declare local_setup_qual="${2:-${local_setup_autodetection[1]}}"
+declare local_setup_experiment="${3:-${local_setup_autodetection[2]}}"
+unset local_setup_autodetection
+
+local_setup_qual="$(SortUPSqualifiers "${local_setup_qual//_/:}")"
+unset -f SortUPSqualifiers
+
+# find which local product setup script to source
+declare local_setup_spec="${local_setup_version}_${local_setup_qual//:/_}"
+declare local_setup_script="localProducts_${MRB_PROJECT:-"larsoft"}_${local_setup_spec}/setup"
+[[ ! -r "$local_setup_script" ]] && [[ -r "localProd/setup" ]] && local_setup_script="localProd/setup"
+[[ ! -r "$local_setup_script" ]] && [[ -r "localProducts/setup" ]] && local_setup_script="localProducts/setup"
+if [[ ! -r "$local_setup_script" ]]; then
+	while : ; do
+		for local_setup_script in localProducts_larsoft_*/setup ; do
+			if [[ -x "$local_setup_script" ]]; then
+				# cheat: peek which versions this setup sets up
+				read local_setup_version local_setup_qual <<< "$(
+					source "$local_setup_script" >& /dev/null
+					echo "${MRB_PROJECT_VERSION} ${MRB_QUAL}"
+				)"
+				break 2
+			fi
+		done
+		# restore the value for error messages
+		local_setup_script="localProducts_larsoft_${local_setup_spec}/setup"
+		break
+	done # fake loop
+fi
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	cat <<-EOM
+	Experiment:           ${local_setup_experiment}
+	LArSoft version:      ${local_setup_version}
+	LArSoft qualifiers:   ${local_setup_qual}
+	Local product setup: '${local_setup_script}'
+	EOM
+	
+	echo "This script needs to be sourced." >&2
+	exit 1
+fi
+
+if [[ -z "$local_setup_version" ]]; then
+	echo "I don't know which LArSoft version to set up!" >&2
+	return 1
+fi
+
+declare -i local_setup_nOutput=0
+
+###
+### base setup
+###
+### Codename settings: product@version@quals
+### If quals is omitted, empty qualifiers are used.
+### If @quals is omitted, default qualifiers are used.
+### If version is omitted, the "current" version is used (no version specified).
+### If @version is omitted, the default version is used.
+### Therefore, a "@@" means current version with no qualifiers.
+###
+declare -a local_setup_codenames
+case "$local_setup_experiment" in
+	( 'MicroBooNE' )
+		# MicroBooNE setup adds to the above a specific UPS repository
+		echo " * MicroBooNE specific setup"
+		source "/grid/fermiapp/uboone/software/setup_uboone.sh"
+		local_setup_codenames=( 'uboonecode' 'ubfcl@@' )
+		;;
+	( 'LBNE' )
+		echo " * LBNE specific setup"
+		source "/grid/fermiapp/lbne/software/setup_lbne.sh"
+		local_setup_codenames=( 'lbnecode' )
+		;;
+	( * )
+		# this is experiment-agnostic setup:
+		echo " * generic LArSoft setup"
+		source /grid/fermiapp/products/larsoft/setup
+		setup git
+		setup gitflow
+		setup mrb
+		export MRB_PROJECT=larsoft
+		local_setup_codenames=( 'larsoft' )
+		;;
+esac
+
+
+###
+### local products UPS setup
+###
+echo " * local products UPS area set up"
+if [[ -r "$local_setup_script" ]]; then
+	echo "   => setup: '$(readlink -f "${local_setup_script}")'"
+	let ++local_setup_nOutput
+	source "$local_setup_script" >& >(sed -e "s/^/    [${local_setup_nOutput}> /")
+else
+	echo "WARNING: no ${local_setup_script} found. Only official packages will be used!" >&2
+fi
+
+###
+### LArSoft setup
+###
+declare local_setup_codename
+for local_setup_codename in "${local_setup_codenames[@]}" ; do
+	declare local_setup_codeversion="${local_setup_codename#*@}"
+	declare local_setup_codequals
+	
+	if [[ "$local_setup_codeversion" == "$local_setup_codename" ]]; then
+		local_setup_codeversion="$local_setup_version"
+		local_setup_codequals="${local_setup_qual//_/:}"
+	else
+		local_setup_codename="${local_setup_codename%"@${local_setup_codeversion}"}"
+		
+		local_setup_codequals="${local_setup_codeversion#*@}"
+		if [[ "$local_setup_codequals" == "$local_setup_codeversion" ]]; then
+			local_setup_codequals="${local_setup_qual//_/:}"
+		else
+			local_setup_codeversion="${local_setup_codeversion%"@${local_setup_codequals}"}"
+			: [[ -z "$local_setup_codequals" ]] # empty is ok
+		fi
+	fi
+	echo " * ${local_setup_codename} ${local_setup_codeversion:-"(current)"} set up${local_setup_codequals:+" (${local_setup_codequals})"}"
+	setup "$local_setup_codename" ${local_setup_codeversion:+"$local_setup_codeversion"} ${local_setup_codequals:+-q  "${local_setup_codequals//_/:}"}
+done
+unset local_setup_codename local_setup_codeversion local_setup_codequals
+
+
+###
+### local products setup
+###
+# echo " * local products set up"
+# source mrb slp
+
+###
+### build environment setup
+###
+echo " * build environment set up"
+declare local_setup_build_script="srcs/setEnv"
+if [[ -r "$local_setup_build_script" ]]; then
+	let ++local_setup_nOutput
+	source mrb setEnv >& >(sed -e "s/^/    [${local_setup_nOutput}> /")
+else
+	echo "ERROR: no ${local_setup_build_script} found. Setup is incomplete (still, runtime should work)." >&2
+fi
+unset local_setup_build_script
+
+echo "Set up complete."
+
+unset local_setup_dir local_setup_experiment local_setup_version local_setup_qual local_setup_spec local_setup_script local_setup_codenames local_setup_nOutput

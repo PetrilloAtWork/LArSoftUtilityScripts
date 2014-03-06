@@ -1,0 +1,94 @@
+#!/bin/bash
+#
+# This is the very basic set up of LArSoft
+# Optionally sets up LArSoft if provided version number and qualifiers
+# or finds which version to set up.
+# 
+# Usage:  source base_setup [LArSoftVersion LArSoftQualifiers]
+#
+
+declare local_scriptdir="$(dirname "$(readlink -f "${BASH_SOURCE:-$0}")")"
+
+declare -a local_setup_autodetection
+if type autodetectLArSoft.sh >& /dev/null ; then
+	local_setup_autodetection=( $(autodetectLArSoft.sh "" "debug:e4" "LArSoft") )
+else
+	echo "Autodetection skipped." >&2
+	local_setup_autodetection=( "" "debug:e4" "LArSoft" )
+fi
+
+declare local_setup_version="${1:-${local_setup_autodetection[0]}}"
+declare local_setup_qual="${2:-${local_setup_autodetection[1]}}"
+declare local_setup_experiment="${3:-${local_setup_autodetection[2]}}"
+unset local_setup_autodetection
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	cat <<-EOM
+	Experiment:         ${local_setup_experiment}
+	LArSoft version:    ${local_setup_version:-none}
+	LArSoft qualifiers: ${local_setup_qual}
+	EOM
+	
+	echo "This script needs to be sourced." >&2
+	exit 1
+fi
+
+
+###
+### regular setup
+### needed for both building and running code;
+### code names are in the form package[@[version[@[quals]]]]
+### If no @version is specified, the general one is used; if an empty version
+### is specified, no qualifiers is allowed and the version is the "current" one;
+### if no @quals are specified, the general ones are used; if empty quals are
+### specified ("@"), no qualifier is used.
+###
+echo "Setting up the environment for ${local_setup_experiment}"
+declare -a local_setup_codenames
+case "$local_setup_experiment" in
+	( 'LBNE' )
+		source '/grid/fermiapp/lbne/software/setup_lbne.sh'
+		local_setup_codenames=( 'lbnecode' )
+		;;
+	( 'MicroBooNE' )
+		source '/grid/fermiapp/uboone/software/setup_uboone.sh'
+		local_setup_codenames=( 'uboonecode' 'ubfcl@@' )
+		;;
+	( * )
+		source /grid/fermiapp/products/larsoft/setup
+		setup git
+		setup gitflow
+		setup mrb
+		export MRB_PROJECT=larsoft
+		local_setup_codenames=( 'larsoft' )
+		;;
+esac
+
+if [[ -n "$local_setup_version" ]]; then
+	declare local_setup_codename
+	for local_setup_codename in "${local_setup_codenames[@]}" ; do
+		declare local_setup_codeversion="${local_setup_codename#*@}"
+		declare local_setup_codequals
+		
+		if [[ "$local_setup_codeversion" == "$local_setup_codename" ]]; then
+			local_setup_codeversion="$local_setup_version"
+			local_setup_codequals="${local_setup_qual//_/:}"
+		else
+			local_setup_codename="${local_setup_codename%"@${local_setup_codeversion}"}"
+			
+			local_setup_codequals="${local_setup_codeversion#*@}"
+			if [[ "$local_setup_codequals" == "$local_setup_codeversion" ]]; then
+				local_setup_codequals="${local_setup_qual//_/:}"
+			else
+				local_setup_codeversion="${local_setup_codeversion%"@${local_setup_codequals}"}"
+				: [[ -z "$local_setup_codequals" ]] # empty is ok
+			fi
+		fi
+		echo " * ${local_setup_codename} ${local_setup_codeversion:-"(current)"} set up${local_setup_codequals:+" (${local_setup_codequals})"}"
+		setup "$local_setup_codename" ${local_setup_codeversion:+"$local_setup_codeversion"} ${local_setup_codequals:+-q  "${local_setup_codequals//_/:}"}
+	done
+	unset local_setup_codename local_setup_codeversion local_setup_codequals
+fi
+
+### clean up
+unset local_scriptdir local_setup_experiment local_setup_version local_setup_qual local_setup_codenames
