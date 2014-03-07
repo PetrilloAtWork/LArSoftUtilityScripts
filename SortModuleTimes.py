@@ -311,7 +311,7 @@ if __name__ == "__main__":
 				"%g\"" % ModuleStats.average(),
 				"(RMS %4.1f%%)" % (RMS / ModuleStats.average() * 100.),
 				"total %g\"" % ModuleStats.sum(), "(%d events:" % ModuleStats.n(),
-				"%g" % ModuleStats.min(), "- %g" % ModuleStats.max(),
+				"%g" % ModuleStats.min(), "- %g)" % ModuleStats.max(),
 				]
 		# if
 		TableData.append(OutputData)
