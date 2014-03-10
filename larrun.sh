@@ -566,7 +566,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 				| '--cachegrind' | '--cachegrind='*   \
 			)
 				Profiler="valgrind"
-				ProfilerTool="${Param%=*}"
+				ProfilerTool="${Param%%=*}"
 				ProfilerTool="${ProfilerTool#--}"
 				[[ "$Param" =~ = ]] && ProfilerToolParams=( "${Param#--${ProfilerTool}=}" )
 				;;

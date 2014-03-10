@@ -106,7 +106,7 @@ case "$local_setup_mode" in
 				;;
 			( * )
 				# this is experiment-agnostic setup:
-				echo " * generic LArSoft setup"
+				echo " * generic LArSoft setup (${local_setup_experiment})"
 				local_setup_base_script="/grid/fermiapp/products/larsoft/setup"
 				if [[ -r "$local_setup_base_script" ]]; then
 					source "$local_setup_base_script" || let ++local_setup_nErrors
@@ -216,6 +216,9 @@ case "$local_setup_mode" in
 				;;
 			( 'LBNE' )
 				local_setup_codenames=( 'lbnecode' )
+				;;
+			( 'AllExperiments' )
+				local_setup_codenames=( 'lbnecode' 'uboonecode' 'ubfcl@@' )
 				;;
 			( * )
 				local_setup_codenames=( 'larsoft' )
