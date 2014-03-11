@@ -560,7 +560,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 				Profiler="valgrind"
 				;;
 			(    '--massif'   | '--massif='*         \
-				| '--dhap'     | '--dhap='*           \
+				| '--dhat'     | '--dhat='*           \
 				| '--memcheck' | '--memcheck='*       \
 				| '--callgrind' | '--callgrind='*     \
 				| '--cachegrind' | '--cachegrind='*   \
