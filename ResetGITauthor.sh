@@ -1,7 +1,7 @@
 #!/bin/bash
 
-UserName="${1:-'petrillo'}"
-Email="${2:-"${UserName}@fnal.gov"}"
+UserName="${1:-"Gianluca Petrillo"}"
+Email="${2:-"petrillo@fnal.gov"}"
 
 largit.sh config --local user.name "$UserName"
 largit.sh config --local user.email "$Email"
