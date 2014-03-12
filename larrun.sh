@@ -222,13 +222,8 @@ function SetupProfiler() {
 			# this is the file which will be created...
 			ProfileOutputFile="${JobName}-gperftools.prof"
 			
-			GPerfToolsLib="$(find ${LD_LIBRARY_PATH//:/ } -name libprofiler.so 2> /dev/null )"
-			if [[ -n "$GPerfToolsLib" ]]; then
-				CommandEnvironment=( "${CommandEnvironment[@]}" "LD_PRELOAD=${GPerfToolsLib}" "CPUPROFILE=${ProfileOutputFile}" )
-			else
-				# it could still work if that library is linked in the executable...
-				ERROR "Can't find libprofiler.so (from gperftools) in the library path"
-			fi
+			GPerfToolsLib='libprofiler.so'
+			CommandEnvironment=( "${CommandEnvironment[@]}" "LD_PRELOAD=${GPerfToolsLib}" "CPUPROFILE=${ProfileOutputFile}" )
 			;;
 		( 'valgrind' )
 			PrependExecutable="valgrind"
@@ -566,7 +561,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 				| '--cachegrind' | '--cachegrind='*   \
 			)
 				Profiler="valgrind"
-				ProfilerTool="${Param%=*}"
+				ProfilerTool="${Param%%=*}"
 				ProfilerTool="${ProfilerTool#--}"
 				[[ "$Param" =~ = ]] && ProfilerToolParams=( "${Param#--${ProfilerTool}=}" )
 				;;

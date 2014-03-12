@@ -83,7 +83,7 @@ unset -f SortUPSqualifiers
 ###
 ### if not sourced, just print what would happen
 ###
-if [[ "$(basename "${BASH_SOURCE[0]}")" == "$(basename "$0")" ]]; then
+if [[ "$(basename -- "${BASH_SOURCE[0]}")" == "$(basename -- "$0")" ]]; then
 	
 	declare local_setup_script="$(local_setup_element 'printlocalproductsscript')"
 	
