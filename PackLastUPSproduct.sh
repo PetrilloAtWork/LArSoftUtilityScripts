@@ -21,8 +21,11 @@ for Package in "$@" ; do
 	LatestDir="${LatestVersionDir%.version}"
 	LatestVersion="$(basename "$LatestDir")"
 	DestFile="${DESTDIR:+"${DESTDIR}/"}${Package}-${LatestVersion}.tar.bz2"
+	CurrentChain="${PackageBaseDir}/current.chain"
+	[[ -d "$CurrentChain" ]] || CurrentChain=''
+	RelativeBase="$(basename "$PackageBaseDir")"
 	echo "Packing ${Package} ${LatestVersion:-"(no version)"} into '${DestFile}'..."
-	tar cf "$DestFile" -C "$(dirname "$PackageBaseDir")" "$(basename "$PackageBaseDir")/${LatestVersion}" "$(basename "$PackageBaseDir")/${LatestVersion}.version"
+	tar cjf "$DestFile" -C "$(dirname "$PackageBaseDir")" "${RelativeBase}/${LatestVersion}" "${RelativeBase}/${LatestVersion}.version" ${CurrentChain:+"${RelativeBase}/$(basename "$CurrentChain")"}
 	[[ $? == 0 ]] || let ++nErrors
 done
 exit $nErrors
