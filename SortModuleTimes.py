@@ -1,6 +1,13 @@
 #!/usr/bin/env python2
 #
-# Prints statistics from TimeModule out of lar log files
+# Author: petrillo@fnal.gov
+# Date:   201403??
+# 
+# Version:
+# 1.0 (petrillo@fnal.gov)
+#   first version
+# 1.1 (petrillo@fnal.gov)
+#   support for compressed input files; added command line interface
 #
 
 import sys, os
@@ -8,6 +15,15 @@ import math
 import gzip
 try: import bz2
 except ImportError: pass
+
+import optparse
+
+Version = "%prog 1.1"
+UsageMsg = """Prints statistics of the module timings based on the information from
+the Timing service.
+
+%prog  [options] LogFile [LogFile ...]
+"""
 
 #
 # statistics collection
@@ -88,8 +104,20 @@ class TimeModuleStatsClass(Stats):
 		return True
 	# add()
 	
-# class TimeModuleStatsClass
-
+	def FormatAsList(self, format_ = None):
+		if isinstance(self.key, basestring): name = str(self.key)
+		else: name = "%s[%s]" % (self.key[1], self.key[0])
+		if (self.n() == 0) or (self.sum() == 0.):
+			return [ name, "n/a" ]
+		RMS = self.rms() if (self.n() != 0) else 0.
+		return [ 
+			name,
+			"%g\"" % self.average(),
+			"(RMS %4.1f%%)" % (RMS / self.average() * 100.),
+			"total %g\"" % self.sum(), "(%d events:" % self.n(),
+			"%g" % self.min(), "- %g)" % self.max(),
+			]
+	# FormatAsList()
 
 #
 # format parsing
@@ -124,6 +152,34 @@ def ParseTimeModuleLine(line):
 		  ("TimeModule format not recognized: '%s' (%s)" % (line, str(e)))
 	# try ... except
 # ParseTimeModuleLine()
+
+def ParseTimeEventLine(line):
+	#
+	# Format 1 (20140226):
+	# TimeModule> run: 1 subRun: 0 event: 10 beziertrackercc BezierTrackerModule 0.231838
+	#
+	Tokens = line.split()
+	
+	if (Tokens[0] != 'TimeEvent>') \
+	  or (Tokens[1] != 'run:') \
+	  or (Tokens[3] != 'subRun:') \
+	  or (Tokens[5] != 'event:') \
+	  or (len(Tokens) != 8) \
+	  :
+		raise FormatError("TimeEvent format not recognized: '%s'" % line)
+	
+	try:
+		return {
+			'run': int(Tokens[2]),
+			'subRun': int(Tokens[4]),
+			'event': int(Tokens[6]),
+			'time': float(Tokens[7]),
+		}
+	except Exception, e:
+		raise FormatError \
+		  ("TimeEvent format not recognized: '%s' (%s)" % (line, str(e)))
+	# try ... except
+# ParseTimeEventLine()
 
 #
 # output
@@ -273,10 +329,16 @@ def OPEN(Path, mode = 'r'):
 
 if __name__ == "__main__": 
 	
-	LogFiles = sys.argv[1:]
+	Parser = optparse.OptionParser(usage=UsageMsg, version=Version)
+	
+#	Parser.add_option("-G", "--nogroup", dest="DontGroup", action="store_true",
+#	  default=False, help="do not group the pages by node" )
+	
+	(options, LogFiles) = Parser.parse_args()
 	
 	AllStats = {}
 	ModulesList = []
+	EventStats = TimeModuleStatsClass("=== events ===", bTrackEntries=True)
 	
 	for LogFilePath in LogFiles:
 		LogFile = OPEN(LogFilePath, 'r')
@@ -285,50 +347,47 @@ if __name__ == "__main__":
 		for iLine, line in enumerate(LogFile):
 			
 			line = line.strip()
-			if not line.startswith("TimeModule> "): continue
 			if line == LastLine: continue # duplicate line
 			LastLine = line
 			
-			try:
-				TimeData = ParseTimeModuleLine(line)
-			except FormatError, e:
-				print >>sys.stderr, \
-				  "Format error on '%s'@%d:" % (LogFilePath, iLine)
-				raise
-			# try ... except
-			
-			try:
-				ModuleStats = AllStats[TimeData['module']]
-			except KeyError:
-				ModuleStats \
-				  = TimeModuleStatsClass(TimeData['module'], bTrackEntries=True)
-				ModulesList.append(TimeData['module'])
-				AllStats[TimeData['module']] = ModuleStats
-			#
-			
-			ModuleStats.add(TimeData)
+			if line.startswith("TimeModule> "):
+				
+				try:
+					TimeData = ParseTimeModuleLine(line)
+				except FormatError, e:
+					print >>sys.stderr, \
+					  "Format error on '%s'@%d:" % (LogFilePath, iLine)
+					raise
+				# try ... except
+				
+				try:
+					ModuleStats = AllStats[TimeData['module']]
+				except KeyError:
+					ModuleStats \
+					  = TimeModuleStatsClass(TimeData['module'], bTrackEntries=True)
+					ModulesList.append(TimeData['module'])
+					AllStats[TimeData['module']] = ModuleStats
+				#
+				
+				ModuleStats.add(TimeData)
+			elif line.startswith("TimeEvent> "):
+				try:
+					TimeData = ParseTimeEventLine(line)
+				except FormatError, e:
+					print >>sys.stderr, \
+					  "Format error on '%s'@%d:" % (LogFilePath, iLine)
+					raise
+				# try ... except
+				
+				EventStats.add(TimeData)
+			else: continue
 			
 		# for line in log file
 	# for log files
 	
 	# present results
-	TableData = []
-	for ModuleKey in ModulesList:
-		ModuleStats = AllStats[ModuleKey]
-		if (ModuleStats.n() == 0) or (ModuleStats.sum() == 0.):
-			OutputData = [ " ".join(ModuleStats.key), "n/a" ]
-		else:
-			RMS = ModuleStats.rms() if (ModuleStats.n() != 0) else 0.
-			OutputData = [ 
-				"%s[%s]" % (ModuleStats.key[1], ModuleStats.key[0]),
-				"%g\"" % ModuleStats.average(),
-				"(RMS %4.1f%%)" % (RMS / ModuleStats.average() * 100.),
-				"total %g\"" % ModuleStats.sum(), "(%d events:" % ModuleStats.n(),
-				"%g" % ModuleStats.min(), "- %g)" % ModuleStats.max(),
-				]
-		# if
-		TableData.append(OutputData)
-	# for
+	TableData = [ AllStats[modKey].FormatAsList() for modKey in ModulesList ]
+	TableData.append(EventStats.FormatAsList())
 	
 	TableContent = TabularAlignment(TableData)
 	print "\n".join(TableToStrings(TableContent))
