@@ -120,6 +120,9 @@ function help() {
 	    equivalent to --valgrind='--tool=massif'
 	--stack
 	    enables stack profiling if the tool supports it (if not, will complain)
+	--mmap
+	    enables more general heap profiling (mmap) if the tool supports it (if
+	    not, will complain)
 	--version , -V
 	    prints the script version
 	EOH
@@ -255,6 +258,7 @@ function SetupProfiler() {
 						"--max-snapshots=${MASSIF_MAXSNAPSHOTS}"
 						)
 					isFlagSet DoStackProfiling && PrependExecutableParameters=( "${PrependExecutableParameters[@]}" '--stacks=yes' )
+					isFlagSet DoMMapProfiling && PrependExecutableParameters=( "${PrependExecutableParameters[@]}" '--pages-as-heap=yes' )
 					;;
 				( 'dhat' )
 					ToolOption="exp-dhat"
@@ -521,6 +525,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 				CommandEnvironment=( "${CommandEnvironment[@]}" "${Param#--env:}" )
 				;;
 			( '--stack' ) DoStackProfiling=1 ;;
+			( '--mmap' ) DoMMapProfiling=1 ;;
 			
 			#
 			# FAST profiler
