@@ -22,14 +22,18 @@ function help() {
 	The three arguments specify a default value if autodetection fails.
 	
 	Options [defaults in brackets]:
-	--version
+	--version , -v
 	    prints the version
-	--qualifiers
-	    prints the qualifiers
-	--experiment
+	--qualifiers , -q
+	    prints the qualifiers (colon-separated)
+	--experiment , -e
 	    prints the experiment
-	--ups
+	-Q
+	    prints the qualifiers (underscore-separated)
+	--ups , --upssetup , -u
 	    prints version and qualifiers in UPS setup format
+	--localprod , -l
+	    prints version and qualifiers in localProducts directory format
 	EOH
 } # help()
 
@@ -123,8 +127,10 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			
 			( '--version' | '-v' )    Format="${Format:+"${Format}\n"}%V" ;;
 			( '--qualifiers' | '-q' ) Format="${Format:+"${Format}\n"}%Q" ;;
+			( '-Q' ) Format="${Format:+"${Format}\n"}%q" ;;
 			( '--experiment' | '-e' ) Format="${Format:+"${Format}\n"}%E" ;;
 			( '--ups' | '--upssetup' | '-u' ) Format="${Format:+"${Format}\n"}%V -q %Q" ;;
+			( '--localprod' | '-l' ) Format="${Format:+"${Format}\n"}%V_%q" ;;
 			
 			### other stuff
 			( '-' | '--' )
@@ -270,7 +276,8 @@ esac
 
 declare Output="$Format"
 Output="$(sed -e "s/\(^\|[^%]\)%V/\1${LArSoftVersion}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^%]\)%Q/\1${LArSoftQualifiers}/g" <<< "$Output")"
+Output="$(sed -e "s/\(^\|[^%]\)%Q/\1${LArSoftQualifiers//_/:}/g" <<< "$Output")"
+Output="$(sed -e "s/\(^\|[^%]\)%q/\1${LArSoftQualifiers//:/_}/g" <<< "$Output")"
 Output="$(sed -e "s/\(^\|[^%]\)%E/\1${Experiment}/g" <<< "$Output")"
 Output="$(sed -e "s/%%/%/g" <<< "$Output")"
 printf "$Output"
