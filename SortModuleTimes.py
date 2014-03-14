@@ -5,6 +5,9 @@
 
 import sys, os
 import math
+import gzip
+try: import bz2
+except ImportError: pass
 
 #
 # statistics collection
@@ -261,6 +264,13 @@ def TableToStrings(TableContent, separator = " "):
 # TableToStrings()
 
 
+def OPEN(Path, mode = 'r'):
+	if Path.endswith('.bz2'): return bz2.BZ2File(Path, mode)
+	if Path.endswith('.gz'): return gzip.GzipFile(Path, mode)
+	return open(Path, mode)
+# OPEN()
+
+
 if __name__ == "__main__": 
 	
 	LogFiles = sys.argv[1:]
@@ -269,12 +279,15 @@ if __name__ == "__main__":
 	ModulesList = []
 	
 	for LogFilePath in LogFiles:
-		LogFile = open(LogFilePath, 'r')
+		LogFile = OPEN(LogFilePath, 'r')
 		
+		LastLine = None
 		for iLine, line in enumerate(LogFile):
 			
 			line = line.strip()
 			if not line.startswith("TimeModule> "): continue
+			if line == LastLine: continue # duplicate line
+			LastLine = line
 			
 			try:
 				TimeData = ParseTimeModuleLine(line)
