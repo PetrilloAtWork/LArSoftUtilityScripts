@@ -9,10 +9,15 @@
 #     first published version
 # 1.1 (petrillo@fnal.gov)
 #     added source file specification and printing of start command
+# 1.2 (petrillo@fnal.gov)
+#     improved code identification
+# 1.3 (petrillo@fnal.gov)
+#     in sandbox mode, all the lar arguments known to be file paths are made
+#     absolute; this makes the '-s' option implementation redundant
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.1"
+SCRIPTVERSION="1.3"
 
 DATETAG="$(datetag)"
 
@@ -62,9 +67,6 @@ function help() {
 	--config=CONFIGFILE , -c CONFIGFILE
 	    alternative way to specify a configuration file; if not specified, the
 	    first non-option parameter will be taken as configuration file
-	--source=SOURCEFILE , -s SOURCEFILE
-	    alternative way to specify a source file; this is the recommended way
-	    when using a sandbox
 	--foreground , --fg
 	    does not put the command in background and waits for it to finish,
 	    dumping the log on the screen in the meanwhile
@@ -446,6 +448,7 @@ function PrintPackageVersions() {
 			PrintLocalPackage "$Package"
 			
 		done
+		echo "Local area: '${MRB_INSTALL}'"
 	else
 		echo "[no MRB local products]"
 	fi
@@ -502,8 +505,8 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--noconfigdump' )           DUMPCONFIG=0 ;;
 			( '--config='* | '--cfg='* )   ConfigFile="${Param#--*=}" ;;
 			( '-c' )                       let ++iParam ; ConfigFile="${!iParam}" ;;
-			( '--source='* | '--src='* )   SourceFiles=( "${SourceFiles[@]}" "${Param#--*=}" ) ;;
-			( '-s' )                       let ++iParam ; SourceFiles=( "${SourceFiles[@]}" "${!iParam}" ) ;;
+		#	( '--source='* | '--src='* )   SourceFiles=( "${SourceFiles[@]}" "${Param#--*=}" ) ;;
+		#	( '-s' )                       let ++iParam ; SourceFiles=( "${SourceFiles[@]}" "${!iParam}" ) ;;
 			( '--jobname='* )              JobBaseName="${Param#--*=}" ;;
 			
 			### profiling options
@@ -628,6 +631,30 @@ fi
 
 [[ -n "$ExitCode" ]] && exit $ExitCode
 
+# steal lar parameters and identify path parameters
+declare -ai PathParams
+declare -a LArParams
+for (( iParam = 0; iParam < $nParams ; ++iParam )); do
+	Param="${Params[iParam]}"
+	case "$Param" in
+		( '-s' | '-S' | '-T' | '-o' \
+			| '--source' | '--source-list' | '-TFileName' | '--output' \
+			)
+			let ++iParam # skip the file name
+			LArParams=( "${LArParams[@]}" "$Param" "${Params[iParam]}" )
+			PathParams=( "${PathParams[@]}" "$((${#LArParams[@]} - 1))" )
+			;;
+		( '-c' | '--config' )
+			let ++iParam # skip the file name
+			[[ -n "$ConfigFile" ]] && [[ "$ConfigFile" != "${Params[iParam]}" ]] && FATAL 1 "Configuration file specified more than once ('${ConfigFile}', then '${Params[iParam]}')"
+			ConfigFile="${Params[iParam]}"
+			;;
+		( * )
+			LArParams=( "${LArParams[@]}" "$Param" )
+			;;
+	esac
+done
+
 
 declare ConfigName="$(basename "${ConfigFile%.fcl}")"
 : ${JobBaseName:="$ConfigName"}
@@ -684,6 +711,11 @@ if isFlagSet SANDBOX ; then
 		fi
 	done
 	
+	# turn all the path parameters to absolute
+	for iParam in "${PathParams[@]}" ; do
+		LArParams[iParam]="$(pwd)/${LArParams[iParam]}"
+	done
+	
 	pushd "$WorkDir" > /dev/null || FATAL 3 "Can't use the working directory '${WorkDir}'"
 fi
 
@@ -705,7 +737,7 @@ LASTFATAL "Error setting up the profiling tool '${Profiler}'. Quitting."
 # execute the command
 #
 declare -a BaseCommand
-BaseCommand=( lar -c "$ConfigPath" "${SourceParams[@]}" "${Params[@]}" )
+BaseCommand=( lar -c "$ConfigPath" "${SourceParams[@]}" "${LArParams[@]}" )
 
 declare -a Command
 SetupCommand "${BaseCommand[@]}"
