@@ -23,7 +23,13 @@ function help() {
 	
 	Options [defaults in brackets]:
 	--version , -v
-	    prints the version
+	    prints LArSoft (environment) version
+	--package , -p
+	    prints the version of the leading source package for the experiment,
+	    or the version as in '--version' if no such source package is present
+	-P
+	    prints the version of the leading source package for the experiment,
+	    or an empty string if no such source package is present
 	--qualifiers , -q
 	    prints the qualifiers (colon-separated)
 	--experiment , -e
@@ -115,6 +121,28 @@ function FindLocalProductsDir() {
 } # FindLocalProductsDir()
 
 
+function FindSourceDir() {
+	local SourceDir="$MRB_SOURCE"
+	[[ -z "$SourceDir" ]] && SourceDir="${MRB_TOP:-"."}/srcs"
+	[[ -f "${SourceDir}/setEnv" ]] && echo "$SourceDir"
+} # FindSourceDir()
+
+
+function PackageSourceVersion() {
+	local PackageName="$1"
+	local SourceDir="${2:-$(FindSourceDir)}"
+	[[ -z "$SourceDir" ]] && return 1
+	
+	local PackageDir="${SourceDir}/${Package}"
+	[[ -d "$PackageDir" ]] || return 2
+	local UPSdeps="${PackageDir}/ups/product_deps"
+	[[ -f "$UPSdeps" ]] || return 3
+	
+	grep "^ *parent ${PackageName}" "$UPSdeps" | head -n 1 | awk '{ print $3 ; }'
+	return $PIPESTATUS # grep return code
+} # PackageSourceVersion()
+
+
 ################################################################################
 declare -i NoMoreOptions=0
 declare -a Versions
@@ -126,10 +154,12 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--help' | '-h' | '-?' ) DoHelp=1  ;;
 			
 			( '--version' | '-v' )    Format="${Format:+"${Format}\n"}%V" ;;
+			( '--package' | '-p' )    Format="${Format:+"${Format}\n"}%P" ;;
+			( '-P' )                  Format="${Format:+"${Format}\n"}%p" ;;
 			( '--qualifiers' | '-q' ) Format="${Format:+"${Format}\n"}%Q" ;;
 			( '-Q' ) Format="${Format:+"${Format}\n"}%q" ;;
 			( '--experiment' | '-e' ) Format="${Format:+"${Format}\n"}%E" ;;
-			( '--ups' | '--upssetup' | '-u' ) Format="${Format:+"${Format}\n"}%V -q %Q" ;;
+			( '--ups' | '--upssetup' | '-u' ) Format="${Format:+"${Format}\n"}%P -q %Q" ;;
 			( '--localprod' | '-l' ) Format="${Format:+"${Format}\n"}%V_%q" ;;
 			
 			### other stuff
@@ -265,16 +295,24 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$Experiment")" in
 		;;
 	( 'lbne' )
 		Experiment="LBNE"
+		LeadingPackage="lbnecode"
 		;;
 	( 'uboone' | 'microboone' )
 		Experiment="MicroBooNE"
+		LeadingPackage="uboonecode"
 		;;
 	( 'larsoft' )
 		Experiment="LArSoft"
+		LeadingPackage="larsoft"
 		;;
 esac
 
+declare RealLeadingPackageVersion="$(PackageSourceVersion "$LeadingPackage")"
+declare LeadingPackageVersion="${RealLeadingPackageVersion:-${LArSoftVersion}}"
+
 declare Output="$Format"
+Output="$(sed -e "s/\(^\|[^%]\)%P/\1${RealLeadingPackageVersion}/g" <<< "$Output")"
+Output="$(sed -e "s/\(^\|[^%]\)%p/\1${LeadingPackageVersion}/g" <<< "$Output")"
 Output="$(sed -e "s/\(^\|[^%]\)%V/\1${LArSoftVersion}/g" <<< "$Output")"
 Output="$(sed -e "s/\(^\|[^%]\)%Q/\1${LArSoftQualifiers//_/:}/g" <<< "$Output")"
 Output="$(sed -e "s/\(^\|[^%]\)%q/\1${LArSoftQualifiers//:/_}/g" <<< "$Output")"
