@@ -11,11 +11,29 @@
 
 declare SCRIPTNAME="$(basename "$0")"
 
-: ${DefaultFormat:="%V\n%Q\n%E\n"}
+################################################################################
+###  Format tags
+# all these have to start with the item tag ('%');
+                 ItemTag='%'
+           VersionFormat="${ItemTag}V"
+        QualifiersFormat="${ItemTag}Q"
+  QualifiersInPathFormat="${ItemTag}q"
+        ExperimentFormat="${ItemTag}E"
+    LeadingPackageFormat="${ItemTag}L"
+    PackageVersionFormat="${ItemTag}p"
+RealPackageVersionFormat="${ItemTag}P"
 
+: ${DefaultFormat:="${VersionFormat}\n${QualifiersFormat}\n${ExperimentFormat}\n"}
+
+      UPSformat="${LeadingPackageFormat} ${PackageVersionFormat} -q ${QualifiersFormat}"
+LArSoftUPSformat="larsoft ${VersionFormat} -q ${QualifiersFormat}"
+  LocalProdFormat="${PackageVersionFormat}_${QualifiersInPathFormat}"
+
+################################################################################
 function help() {
 	cat <<-EOH
-	Creates a workikng area based on a production release (no MRB).
+	Detects and prints parameters of the current LArSoft working area and
+	environment.
 	
 	Usage:  ${SCRIPTNAME} [options] [version [qualifiers [experiment]]]
 	
@@ -23,23 +41,31 @@ function help() {
 	
 	Options [defaults in brackets]:
 	--version , -v
-	    prints LArSoft (environment) version
+	    prints LArSoft (environment) version [${VersionFormat}]
+	--qualifiers , -q
+	    prints the qualifiers (colon-separated) [${QualifiersFormat}]
+	--experiment , -e
+	    prints the experiment [${ExperimentFormat}]
 	--package , -p
 	    prints the version of the leading source package for the experiment,
-	    or the version as in '--version' if no such source package is present
+	    or the version as in '--version' if no such source package is present [${PackageVersionFormat}]
 	-P
 	    prints the version of the leading source package for the experiment,
-	    or an empty string if no such source package is present
-	--qualifiers , -q
-	    prints the qualifiers (colon-separated)
-	--experiment , -e
-	    prints the experiment
+	    or an empty string if no such source package is present [${RealPackageVersionFormat}]
+	--leadingpackage , -L
+	    prints the name of the leading source package for the experiment [${LeadingPackageFormat}]
 	-Q
-	    prints the qualifiers (underscore-separated)
+	    prints the qualifiers (underscore-separated) [${QualifiersInPathFormat}]
 	--ups , --upssetup , -u
-	    prints version and qualifiers in UPS setup format
+	    prints leading package version and qualifiers in UPS setup format
+	-U
+	    prints LArSoft version and qualifiers in UPS setup format
 	--localprod , -l
 	    prints version and qualifiers in localProducts directory format
+	--format=FORMAT , -f FORMAT
+	    use FORMAT directly as format string; the string is printed by the bash
+	    \`printf\` function; the codes for each option are reported in brackets
+	    in the option description; the default format is '${DefaultFormat}'
 	EOH
 } # help()
 
@@ -120,6 +146,42 @@ function FindLocalProductsDir() {
 	return 1
 } # FindLocalProductsDir()
 
+function FindLocalProduct() {
+	local PackageName="$1"
+	local PackageVersion="$2"
+	local LocalProductDir="${3:-$(FindLocalProductsDir)}"
+	
+	local UPSpackageDir="${LocalProductDir}/${PackageName}"
+	[[ -d "$UPSpackageDir" ]] || return 2
+	
+	[[ -d "${UPSpackageDir}/${PackageVersion}" ]]
+} # FindLocalProduct()
+
+
+function FindHighestLocalProductVersion() {
+	local PackageName="$1"
+	local LocalProductDir="${2:-$(FindLocalProductsDir)}"
+	
+	local UPSpackageDir="${LocalProductDir}/${PackageName}"
+	[[ -d "$UPSpackageDir" ]] || return 2
+	
+	basename "$(ls -rvd "${UPSpackageDir}/"*.version | head -n 1)" | sed -e 's/.version$//'
+} # FindHighestLocalProductVersion()
+
+
+function FindPreviousLocalProductVersion() {
+	local PackageName="$1"
+	local PackageVersion="$2"
+	local LocalProductDir="${3:-$(FindLocalProductsDir)}"
+	
+	local UPSpackageDir="${LocalProductDir}/${PackageName}"
+	[[ -d "$UPSpackageDir" ]] || return 2
+	
+	local ReferenceKey="${UPSpackageDir}/${PackageName}/${PackageVersion}.version"
+	local TargetDir="$({ ls -d "${UPSpackageDir}/"*.version ; echo "$ReferenceKey" ; } | sort | grep -B1 "$ReferenceKey" | tail -n 2 | head)"
+	[[ -n "$TargetDir" ]] && basename "${TargetDir%.version}"
+} # FindPreviousLocalProductVersion()
+
 
 function FindSourceDir() {
 	local SourceDir="$MRB_SOURCE"
@@ -133,7 +195,7 @@ function PackageSourceVersion() {
 	local SourceDir="${2:-$(FindSourceDir)}"
 	[[ -z "$SourceDir" ]] && return 1
 	
-	local PackageDir="${SourceDir}/${Package}"
+	local PackageDir="${SourceDir}/${PackageName}"
 	[[ -d "$PackageDir" ]] || return 2
 	local UPSdeps="${PackageDir}/ups/product_deps"
 	[[ -f "$UPSdeps" ]] || return 3
@@ -141,6 +203,36 @@ function PackageSourceVersion() {
 	grep "^ *parent ${PackageName}" "$UPSdeps" | head -n 1 | awk '{ print $3 ; }'
 	return $PIPESTATUS # grep return code
 } # PackageSourceVersion()
+
+
+function FindPackageVersion() {
+	local PackageName="$1"
+	local PackageVersion="$2"
+	
+	# look in the source directory for the current version ofthe specified package
+	local DetectedPackageVersion="$(PackageSourceVersion "$PackageName")"
+	
+	if [[ -z "$DetectedPackageVersion" ]]; then # if we can't find any version...
+		# look in the local products directory and get the most recent installed
+		# version of this package up to the version we are setting up
+		DetectedPackageVersion="$(FindPreviousLocalProductVersion "$PackageName" "$PackageVersion")"
+	fi
+	
+	# if no version could be found don't print aything
+	echo "$DetectedPackageVersion"
+} # FindPackageVersion()
+
+
+function DetectPackageVersion() {
+	local PackageName="$1"
+	local PackageVersion="$2"
+	
+	local DetectedPackageVersion="$(FindPackageVersion "$PackageName" "$PackageVersion")"
+	
+	# if no version could be found, just stick to the given version
+	# (we hope it's somewhere in UPS)
+	echo "${DetectedPackageVersion:-${PackageVersion}}"
+} # DetectPackageVersion()
 
 
 ################################################################################
@@ -153,14 +245,19 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 		case "$Param" in
 			( '--help' | '-h' | '-?' ) DoHelp=1  ;;
 			
-			( '--version' | '-v' )    Format="${Format:+"${Format}\n"}%V" ;;
-			( '--package' | '-p' )    Format="${Format:+"${Format}\n"}%P" ;;
-			( '-P' )                  Format="${Format:+"${Format}\n"}%p" ;;
-			( '--qualifiers' | '-q' ) Format="${Format:+"${Format}\n"}%Q" ;;
-			( '-Q' ) Format="${Format:+"${Format}\n"}%q" ;;
-			( '--experiment' | '-e' ) Format="${Format:+"${Format}\n"}%E" ;;
-			( '--ups' | '--upssetup' | '-u' ) Format="${Format:+"${Format}\n"}%P -q %Q" ;;
-			( '--localprod' | '-l' ) Format="${Format:+"${Format}\n"}%V_%q" ;;
+			( '--version' | '-v' )    Format="${Format:+"${Format}\\n"}${VersionFormat}" ;;
+			( '--package' | '-p' )    Format="${Format:+"${Format}\\n"}${RealPackageVersionFormat}" ;;
+			( '-P' )                  Format="${Format:+"${Format}\\n"}${PackageVersionFormat}" ;;
+			( '--qualifiers' | '-q' ) Format="${Format:+"${Format}\\n"}${QualifiersFormat}" ;;
+			( '-Q' )                  Format="${Format:+"${Format}\\n"}${QualifiersInPathFormat}" ;;
+			( '--experiment' | '-e' ) Format="${Format:+"${Format}\\n"}${ExperimentFormat}" ;;
+			( '--leadingpackage' | '-L' ) Format="${Format:+"${Format}\\n"}${LeadingPackageFormat}" ;;
+			( '--ups' | '--upssetup' | '-u' ) Format="${Format:+"${Format}\\n"}${UPSformat}" ;;
+			( '-U' )                  Format="${Format:+"${Format}\\n"}${LArSoftUPSformat}" ;;
+			( '--localprod' | '-l' )  Format="${Format:+"${Format}\\n"}${LocalProdFormat}" ;;
+			
+			( '--format=' )           Format="${Param#--format=}" ;;
+			( '--format' | '-f' )     let ++iParam; Format="${!iParam}" ;;
 			
 			### other stuff
 			( '-' | '--' )
@@ -307,15 +404,17 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$Experiment")" in
 		;;
 esac
 
-declare RealLeadingPackageVersion="$(PackageSourceVersion "$LeadingPackage")"
-declare LeadingPackageVersion="${RealLeadingPackageVersion:-${LArSoftVersion}}"
+# look in the source directory for the current version ofthe specified package
+declare RealLeadingPackageVersion="$(FindPackageVersion "$LeadingPackage" "$LArSoftVersion")"
+declare LeadingPackageVersion=${RealLeadingPackageVersion:-${LArSoftVersion}}
 
 declare Output="$Format"
-Output="$(sed -e "s/\(^\|[^%]\)%P/\1${RealLeadingPackageVersion}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^%]\)%p/\1${LeadingPackageVersion}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^%]\)%V/\1${LArSoftVersion}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^%]\)%Q/\1${LArSoftQualifiers//_/:}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^%]\)%q/\1${LArSoftQualifiers//:/_}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^%]\)%E/\1${Experiment}/g" <<< "$Output")"
-Output="$(sed -e "s/%%/%/g" <<< "$Output")"
+Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${VersionFormat}/\1${LArSoftVersion}/g" <<< "$Output")"
+Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${QualifiersFormat}/\1${LArSoftQualifiers//_/:}/g" <<< "$Output")"
+Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${QualifiersInPathFormat}/\1${LArSoftQualifiers//:/_}/g" <<< "$Output")"
+Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${ExperimentFormat}/\1${Experiment}/g" <<< "$Output")"
+Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${RealPackageVersionFormat}/\1${RealLeadingPackageVersion}/g" <<< "$Output")"
+Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${PackageVersionFormat}/\1${LeadingPackageVersion}/g" <<< "$Output")"
+Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${LeadingPackageFormat}/\1${LeadingPackage}/g" <<< "$Output")"
+Output="$(sed -e "s/${ItemTag}${ItemTag}/${ItemTag}/g" <<< "$Output")"
 printf "$Output"

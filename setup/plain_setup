@@ -59,13 +59,15 @@ esac
 
 ################################################################################
 ###
-### Autodetection of the working area features
+### Learn about the working area features from the caller
 ###
 declare local_scriptdir="$(dirname "$(readlink -f "${BASH_SOURCE:-$0}")")"
 
 declare local_setup_version="$2"
 declare local_setup_qual="$3"
 declare local_setup_experiment="$4"
+declare local_setup_package="${5:-'larsoft'}"
+declare local_setup_package_version="${6:-${local_setup_version}}"
 
 ###
 ### fill in the needed parameters
@@ -209,19 +211,19 @@ case "$local_setup_mode" in
 		### If @version is omitted, the default version is used.
 		### Therefore, a "@@" means current version with no qualifiers.
 		###
-		declare -a local_setup_codenames
+		declare -a local_setup_codenames=( "$local_setup_package" )
 		case "$local_setup_experiment" in
 			( 'MicroBooNE' )
-				local_setup_codenames=( 'uboonecode' 'ubfcl@@' )
+				local_setup_codenames=( "${local_setup_codenames[@]}" 'ubfcl@@' )
 				;;
 			( 'LBNE' )
-				local_setup_codenames=( 'lbnecode' )
+				local_setup_codenames=( "${local_setup_codenames[@]}" )
 				;;
 			( 'AllExperiments' )
-				local_setup_codenames=( 'lbnecode' 'uboonecode' 'ubfcl@@' )
+				local_setup_codenames=( "${local_setup_codenames[@]}" 'lbnecode' 'uboonecode' 'ubfcl@@' )
 				;;
 			( * )
-				local_setup_codenames=( 'larsoft' )
+				local_setup_codenames=( "${local_setup_codenames[@]}" )
 				;;
 		esac
 		
@@ -232,7 +234,7 @@ case "$local_setup_mode" in
 			declare local_setup_codequals
 			
 			if [[ "$local_setup_codeversion" == "$local_setup_codename" ]]; then
-				local_setup_codeversion="$local_setup_version"
+				local_setup_codeversion="$local_setup_package_version"
 				local_setup_codequals="${local_setup_qual//_/:}"
 			else
 				local_setup_codename="${local_setup_codename%"@${local_setup_codeversion}"}"

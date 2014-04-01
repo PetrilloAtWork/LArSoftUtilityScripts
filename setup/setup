@@ -41,7 +41,7 @@ if [[ ! -f "${local_scriptdir}/plain_setup" ]]; then
 fi
 
 function local_setup_element() {
-	source "${local_scriptdir}/plain_setup" "$1" "$local_setup_version" "$local_setup_qual" "$local_setup_experiment"
+	source "${local_scriptdir}/plain_setup" "$1" "$local_setup_version" "$local_setup_qual" "$local_setup_experiment" "$local_setup_package"  "$local_setup_package_version"
 }
 
 ###
@@ -53,10 +53,10 @@ declare local_setup_autodetection_script="$(which 'autodetectLArSoft.sh' >& /dev
 [[ -x "$local_setup_autodetection_script" ]] || local_setup_autodetection_script="${local_scriptdir}/autodetectLArSoft.sh"
 [[ -x "$local_setup_autodetection_script" ]] || local_setup_autodetection_script="$(dirname "$local_scriptdir")/autodetectLArSoft.sh"
 if [[ -x "$local_setup_autodetection_script" ]] ; then
-	local_setup_autodetection=( $("$local_setup_autodetection_script" "nightly" "debug:e4" "LArSoft") )
+	local_setup_autodetection=( $("$local_setup_autodetection_script" -v -q -e -L -p "nightly" "debug:e4" "LArSoft") )
 else
 	echo "Autodetection skipped." >&2
-	local_setup_autodetection=( "" "debug:e4" "LArSoft" )
+	local_setup_autodetection=( "" "debug:e4" "LArSoft" 'larsoft' "" )
 fi
 unset local_setup_autodetection_script
 
@@ -72,6 +72,8 @@ esac
 declare local_setup_version="${2:-${local_setup_autodetection[0]}}"
 declare local_setup_qual="${3:-${local_setup_autodetection[1]}}"
 declare local_setup_experiment="${4:-${local_setup_autodetection[2]}}"
+declare local_setup_package="${local_setup_autodetection[3]:-'larsoft'}"
+declare local_setup_package_version="${local_setup_autodetection[4]:-${local_setup_version}}"
 unset local_setup_autodetection
 
 ###
@@ -88,11 +90,13 @@ if [[ "$(basename -- "${BASH_SOURCE[0]}")" == "$(basename -- "$0")" ]]; then
 	declare local_setup_script="$(local_setup_element 'printlocalproductsscript')"
 	
 	cat <<-EOM
-	Setup type:           ${local_setup_mode}
-	Experiment:           ${local_setup_experiment}
-	LArSoft version:      ${local_setup_version}
-	LArSoft qualifiers:   ${local_setup_qual}
-	Local product setup: '${local_setup_script}'
+	Setup type:              ${local_setup_mode}
+	Experiment:              ${local_setup_experiment}
+	LArSoft version:         ${local_setup_version}
+	LArSoft qualifiers:      ${local_setup_qual}
+	Local product setup:    '${local_setup_script}'
+	Leading package:         ${local_setup_package}
+	Leading package version: ${local_setup_package_version}
 	EOM
 	
 	echo "This script needs to be sourced." >&2
