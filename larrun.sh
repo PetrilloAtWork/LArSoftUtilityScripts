@@ -17,7 +17,7 @@
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.3"
+SCRIPTVERSION="1.4"
 
 DATETAG="$(datetag)"
 
@@ -36,7 +36,13 @@ DATETAG="$(datetag)"
 
 # maximum number of snapshots taken; after this many are taken, every other
 # snapshot is dropped before a new one is taken
-: ${MASSIF_MAXSNAPSHOTS:="1000"} 
+: ${MASSIF_MAXSNAPSHOTS:="1000"}
+# threshold below which allocations are aggregated as "below threshold",
+# in percent of the total memory
+: ${MASSIF_MEMTHR:="0.1"}
+# rate of detailed snapshots
+# (e.g. 10: 1 detailed every 10 snapshots; 1: every snapshot is detailed)
+: ${MASSIF_DETAILEDFREQ:="1"}
 
 #
 # Standard packages which will be always looked for when printing the environment
@@ -257,7 +263,9 @@ function SetupProfiler() {
 					PrependExecutableParameters=( "${ProfilerToolParams[@]}"
 						"--tool=${ToolOption}"
 						"--massif-out-file=${OutputFile}"
-						"--max-snapshots=${MASSIF_MAXSNAPSHOTS}"
+						${MASSIF_MAXSNAPSHOTS:+"--max-snapshots=${MASSIF_MAXSNAPSHOTS}"}
+						${MASSIF_DETAILEDFREQ:+"--detailed-freq=${MASSIF_DETAILEDFREQ}"}
+						${MASSIF_MEMTHR:+"--threshold=${MASSIF_MEMTHR}"}
 						)
 					isFlagSet DoStackProfiling && PrependExecutableParameters=( "${PrependExecutableParameters[@]}" '--stacks=yes' )
 					isFlagSet DoMMapProfiling && PrependExecutableParameters=( "${PrependExecutableParameters[@]}" '--pages-as-heap=yes' )
