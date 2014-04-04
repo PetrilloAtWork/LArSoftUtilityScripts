@@ -14,10 +14,14 @@
 # 1.3 (petrillo@fnal.gov)
 #     in sandbox mode, all the lar arguments known to be file paths are made
 #     absolute; this makes the '-s' option implementation redundant
+# 1.4 (petrillo@fnal.gov)
+# 1.5 (petrillo@fnal.gov)
+#     find the FCL find on our own, copy it into the sandbox;
+#     added output of the configuration file found
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.4"
+SCRIPTVERSION="1.5"
 
 DATETAG="$(datetag)"
 
@@ -464,6 +468,26 @@ function PrintPackageVersions() {
 } # PrintPackageVersions()
 
 
+function FindFCLfile() {
+	# Prints the full path of the FCL file which would be selected
+	# (or so we think).
+	# Returns 0 if the file is actually found.
+	local FileName="$1"
+	if [[ -r "$FileName" ]]; then
+		echo "$FileName"
+		return 0
+	fi
+	tr ':' '\n' <<< "$FHICL_FILE_PATH" | while read CandidatePath ; do
+		CandidateFile="${CandidatePath:+${CandidatePath}/}${FileName}"
+		[[ -r "$CandidateFile" ]] || continue
+		echo "$CandidateFile"
+		exit 42
+	done
+	[[ "${PIPE_STATUS[1]}" == 42 ]] && return 0
+	return 1
+} # FindFCLfile()
+
+
 
 function InterruptHandler() {
 	echo
@@ -667,7 +691,14 @@ done
 declare ConfigName="$(basename "${ConfigFile%.fcl}")"
 : ${JobBaseName:="$ConfigName"}
 
-declare ConfigPath="$ConfigFile"
+declare UserConfigPath="$ConfigFile"
+declare FullConfigPath="$(FindFCLfile "$UserConfigPath")"
+# ConfigPath is the configuration actually passed to lar;
+# by default, we give it to lar what we found
+# (it might be the wrong one, but it's well identified
+# and if the user is not happy he/she can fix it)
+declare ConfigPath="$FullConfigPath"
+
 declare LogPath
 LogPath="$(FindNextLogFile "$JobBaseName")"
 LASTFATAL "Failed to find a suitable log file name for ${JobBaseName}!"
@@ -695,10 +726,6 @@ if isFlagSet SANDBOX ; then
 	declare WorkDir="${LogPath%.log}"
 	mkdir -p "$WorkDir"
 	
-	# we need to make the config path absolute;
-	# in alternative, we could specify a command line parameter
-# 	[[ -r "$ConfigFile" ]] && ConfigPath="$(readlink -f "$ConfigFile")"
-	
 	# we want the actual log file to be in the sandbox;
 	# for convenience, it will be linked by the one outside the box
 	declare RealLogPath="${WorkDir}/${JobName}.log"
@@ -707,9 +734,9 @@ if isFlagSet SANDBOX ; then
 	
 	# instead, we copy the configuration file in the working area;
 	# this helps keeping track of what was actually used
-	if [[ -r "$ConfigFile" ]]; then
-		cp -a "$ConfigFile" "$WorkDir"
-		ConfigPath="./$(basename "$ConfigFile")"
+	if [[ -r "$ConfigFullPath" ]]; then
+		cp -a "$ConfigFullPath" "$WorkDir"
+		ConfigPath="./$(basename "$ConfigFullPath")"
 	fi
 	
 	for (( iSource = 0 ; iSource < ${#SourceFiles[@]} ; ++iSource )); do
@@ -721,7 +748,9 @@ if isFlagSet SANDBOX ; then
 	
 	# turn all the path parameters to absolute
 	for iParam in "${PathParams[@]}" ; do
-		LArParams[iParam]="$(pwd)/${LArParams[iParam]}"
+		Param="${LArParams[iParam]}"
+		[[ "${Param:0:1}" == '/' ]] && continue
+		LArParams[iParam]="$(pwd)/${Param}"
 	done
 	
 	pushd "$WorkDir" > /dev/null || FATAL 3 "Can't use the working directory '${WorkDir}'"
@@ -759,13 +788,14 @@ trap InterruptHandler SIGINT
 echo "$(date) --- starting ---------------------------------------------------"
 cat <<EOM > "$AbsoluteLogPath"
 ================================================================================
-Job name:  '${JobName}'
-Host:       $(hostname)
-Directory:  $(pwd)
-Executing:  ${Command[@]}
-Log file:  '${LogPath}'
-Date:       $(date)
-Run with:   ${0} ${@}
+Job name:    '${JobName}'
+Config file: '${FullConfigPath}'
+Host:         $(hostname)
+Directory:    $(pwd)
+Executing:    ${Command[@]}
+Log file:    '${LogPath}'
+Date:         $(date)
+Run with:     ${0} ${@}
 ================================================================================
 $(PrintPackageVersions "${StandardPackages[@]}")
 ================================================================================
@@ -789,11 +819,12 @@ if isFlagUnset DontRun ; then
 	LarPID="$!"
 fi
 cat <<EOM
-Job name:  '${JobName}'
-Directory:  $(pwd)
-Executing:  ${Command[@]}
-Log file:  '${LogPath}'
-Process ID: ${LarPID:-(not running)}
+Job name:    '${JobName}'
+Directory:    $(pwd)
+Config file: '${FullConfigPath}'
+Executing:    ${Command[@]}
+Log file:    '${LogPath}'
+Process ID:   ${LarPID:-(not running)}
 EOM
 if isFlagSet NOBG && [[ -n "$LarPID" ]]; then
 	

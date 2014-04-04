@@ -43,11 +43,11 @@ function SortUPSqualifiers() {
 declare local_setup_mode="$(tr '[:upper:]' '[:lower:]' <<< "${1:-all}")"
 case "$local_setup_mode" in
 	( 'base' \
-          | 'printlocalproductsscript' \
-          | 'localproducts' | 'lp' \
-          | 'localproductssetup' | 'slp' \
-          | 'larsoft' \
-          | 'build' \
+	  | 'printlocalproductsscript' \
+	  | 'localproducts' | 'lp' \
+	  | 'localproductssetup' | 'slp' \
+	  | 'larsoft' \
+	  | 'build' \
 	  )
 		;;
 	( * )

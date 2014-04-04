@@ -23,7 +23,7 @@ function help() {
 	Usage:  ${SCRIPTNAME} [options] Version[@qualifiers] [...]
 	
 	If no qualifiers set is specified, all the standard ones will be created:
-	${StandardQualifiers}.
+	${StandardQualifiers[@]}.
 	
 	Options [defaults in brackets]:
 	--current , -C

@@ -28,6 +28,13 @@ RealPackageVersionFormat="${ItemTag}P"
       UPSformat="${LeadingPackageFormat} ${PackageVersionFormat} -q ${QualifiersFormat}"
 LArSoftUPSformat="larsoft ${VersionFormat} -q ${QualifiersFormat}"
   LocalProdFormat="${PackageVersionFormat}_${QualifiersInPathFormat}"
+        AllFormat="$(cat <<EOM
+Experiment:              ${ExperimentFormat}
+LArSoft version:         ${VersionFormat}
+LArSoft qualifiers:      ${QualifiersFormat}
+Leading package:         ${LeadingPackageFormat}
+Leading package version: ${RealPackageVersionFormat}\n
+EOM)"
 
 ################################################################################
 function help() {
@@ -62,6 +69,8 @@ function help() {
 	    prints LArSoft version and qualifiers in UPS setup format
 	--localprod , -l
 	    prints version and qualifiers in localProducts directory format
+	--all
+	    prints all the information in a human-friendly way
 	--format=FORMAT , -f FORMAT
 	    use FORMAT directly as format string; the string is printed by the bash
 	    \`printf\` function; the codes for each option are reported in brackets
@@ -138,13 +147,22 @@ function FindLocalProductsDir() {
 			VersionQuals="$(ParseLocalProductsDir "$LocalProductsDir")"
 			[[ $? == 0 ]] || continue
 			
-			echo "$VersionQuals"
+			echo "$LocalProductsDir"
 			exit 42
 		done
 		[[ $? == 42 ]] && return 0
 	done
 	return 1
 } # FindLocalProductsDir()
+
+function ExtractLocalProductsDirParams() {
+	local LocalProductsDir
+	LocalProductsDir="$(FindLocalProductsDir)"
+	local res=$?
+	[[ $res != 0 ]] && return $res
+	ParseLocalProductsDir "$LocalProductsDir"
+} # ExtractLocalProductsDirParams()
+
 
 function FindLocalProduct() {
 	local PackageName="$1"
@@ -172,13 +190,13 @@ function FindHighestLocalProductVersion() {
 function FindPreviousLocalProductVersion() {
 	local PackageName="$1"
 	local PackageVersion="$2"
-	local LocalProductDir="${3:-$(FindLocalProductsDir)}"
+	local LocalProductsDir="${3:-$(FindLocalProductsDir)}"
 	
-	local UPSpackageDir="${LocalProductDir}/${PackageName}"
+	local UPSpackageDir="${LocalProductsDir}/${PackageName}"
 	[[ -d "$UPSpackageDir" ]] || return 2
 	
-	local ReferenceKey="${UPSpackageDir}/${PackageName}/${PackageVersion}.version"
-	local TargetDir="$({ ls -d "${UPSpackageDir}/"*.version ; echo "$ReferenceKey" ; } | sort | grep -B1 "$ReferenceKey" | tail -n 2 | head)"
+	local ReferenceKey="${UPSpackageDir}/${PackageVersion}.version"
+	local TargetDir="$({ ls -d "${UPSpackageDir}/"*.version ; echo "$ReferenceKey" ; } | sort | grep -B1 "$ReferenceKey" | tail -n 2 | head -n 1)"
 	[[ -n "$TargetDir" ]] && basename "${TargetDir%.version}"
 } # FindPreviousLocalProductVersion()
 
@@ -255,6 +273,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--ups' | '--upssetup' | '-u' ) Format="${Format:+"${Format}\\n"}${UPSformat}" ;;
 			( '-U' )                  Format="${Format:+"${Format}\\n"}${LArSoftUPSformat}" ;;
 			( '--localprod' | '-l' )  Format="${Format:+"${Format}\\n"}${LocalProdFormat}" ;;
+			( '--all' | '-a' )        Format="${Format:+"${Format}\\n"}${AllFormat}" ;;
 			
 			( '--format=' )           Format="${Param#--format=}" ;;
 			( '--format' | '-f' )     let ++iParam; Format="${!iParam}" ;;
@@ -377,7 +396,7 @@ if [[ -z "$Experiment" ]]; then
 	fi
 fi
 
-LocalProductsDirInfo=( $(FindLocalProductsDir "$MRB_TOP" ) )
+LocalProductsDirInfo=( $(ExtractLocalProductsDirParams "$MRB_TOP" ) )
 if [[ $? == 0 ]]; then
 	LArSoftVersion="${LocalProductsDirInfo[0]}"
 	LArSoftQualifiers="${LocalProductsDirInfo[1]}"
