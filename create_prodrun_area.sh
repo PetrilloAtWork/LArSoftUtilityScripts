@@ -18,7 +18,7 @@ StandardQualifierAliases=( 'debugging' 'profiling' )
 
 function help() {
 	cat <<-EOH
-	Creates a workikng area based on a production release (no MRB).
+	Creates a working area based on a production release (no MRB).
 	
 	Usage:  ${SCRIPTNAME} [options] Version[@qualifiers] [...]
 	

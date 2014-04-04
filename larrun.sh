@@ -734,9 +734,9 @@ if isFlagSet SANDBOX ; then
 	
 	# instead, we copy the configuration file in the working area;
 	# this helps keeping track of what was actually used
-	if [[ -r "$ConfigFullPath" ]]; then
-		cp -a "$ConfigFullPath" "$WorkDir"
-		ConfigPath="./$(basename "$ConfigFullPath")"
+	if [[ -r "$FullConfigPath" ]]; then
+		cp -a "$FullConfigPath" "$WorkDir"
+		ConfigPath="./$(basename "$FullConfigPath")"
 	fi
 	
 	for (( iSource = 0 ; iSource < ${#SourceFiles[@]} ; ++iSource )); do
