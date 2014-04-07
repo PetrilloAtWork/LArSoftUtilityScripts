@@ -34,7 +34,8 @@ LArSoft version:         ${VersionFormat}
 LArSoft qualifiers:      ${QualifiersFormat}
 Leading package:         ${LeadingPackageFormat}
 Leading package version: ${RealPackageVersionFormat}\n
-EOM)"
+EOM
+)"
 
 ################################################################################
 function help() {
