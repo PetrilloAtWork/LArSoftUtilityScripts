@@ -18,10 +18,12 @@
 # 1.5 (petrillo@fnal.gov)
 #     find the FCL find on our own, copy it into the sandbox;
 #     added output of the configuration file found
+# 1.6 (petrillo@fnal.gov)
+#     support for random seed restore file
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.5"
+SCRIPTVERSION="1.6"
 
 DATETAG="$(datetag)"
 
@@ -94,6 +96,10 @@ function help() {
 	    print on the screen the LARSoft UPS packages set up, and exit
 	--norun , -N
 	    does not actually run (use to debug ${SCRIPTNAME})
+	--seed=FILENAME[@ALIAS]
+	    use FILENAME as the file to restore the random seed, optionally changing
+	    its name/location into ALIAS; currently the FCL file must have the ALIAS
+	    path already in, for this to work
 	
 	 (profiling options)
 	--prepend=Executable
@@ -152,6 +158,7 @@ function isFlagUnset() {
 } # isFlagUnset()
 
 function STDERR() { echo "$*" >&2 ; }
+function WARN() { STDERR "WARNING: $@" ; }
 function ERROR() { STDERR "ERROR: $@" ; }
 function FATAL() {
 	local Code="$1"
@@ -508,7 +515,7 @@ function InterruptHandler() {
 ################################################################################
 declare JobBaseName
 
-declare DoHelp=0 DoVersion=0 OnlyPrintEnvironment=0 NoLogDump=0
+declare DoHelp=0 DoVersion=0 OnlyPrintEnvironment=0 NoLogDump=0 UseConfigWrapper=1
 
 declare -i NoMoreOptions=0
 declare ConfigFile
@@ -540,6 +547,16 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 		#	( '--source='* | '--src='* )   SourceFiles=( "${SourceFiles[@]}" "${Param#--*=}" ) ;;
 		#	( '-s' )                       let ++iParam ; SourceFiles=( "${SourceFiles[@]}" "${!iParam}" ) ;;
 			( '--jobname='* )              JobBaseName="${Param#--*=}" ;;
+			( '--nowrap' )                 UseConfigWrapper=0 ;;
+			( '--seed='* )
+				SavedSeed="${Param#--*=}"
+				if [[ "${SavedSeed/@}" != "$SavedSeed" ]]; then
+					RestoreSeed="${SavedSeed#*@}"
+					SavedSeed="${SavedSeed%@RestoreSeed}"
+				else
+					RestoreSeed="$SavedSeed"
+				fi
+				;;
 			
 			### profiling options
 			( '--prepend='* )
@@ -693,17 +710,19 @@ declare ConfigName="$(basename "${ConfigFile%.fcl}")"
 
 declare UserConfigPath="$ConfigFile"
 declare FullConfigPath="$(FindFCLfile "$UserConfigPath")"
+[[ -z "$FullConfigPath" ]] && WARN "Could not find the configuration file '${UserConfigPath}'"
 # ConfigPath is the configuration actually passed to lar;
 # by default, we give it to lar what we found
 # (it might be the wrong one, but it's well identified
 # and if the user is not happy he/she can fix it)
-declare ConfigPath="$FullConfigPath"
+declare ConfigPath="${FullConfigPath:-${UserConfigPath}}"
 
 declare LogPath
 LogPath="$(FindNextLogFile "$JobBaseName")"
 LASTFATAL "Failed to find a suitable log file name for ${JobBaseName}!"
+declare JobTag="$(basename "${LogPath%.log}")"
 
-declare JobName="${JobBaseName}-$(basename "${LogPath%.log}")"
+declare JobName="${JobBaseName}-${JobTag}"
 
 # make sure we can freely overwrite the log files:
 set +o noclobber
@@ -721,9 +740,10 @@ declare AbsoluteLogPath="$(readlink -f "$LogPath")"
 #
 # prepare an empty sandbox
 #
+declare WorkDir="."
 if isFlagSet SANDBOX ; then
 # 	declare WorkDir="$(mktemp -d "workdir_${JobName}_XXXXXX" )"
-	declare WorkDir="${LogPath%.log}"
+	WorkDir="${LogPath%.log}"
 	mkdir -p "$WorkDir"
 	
 	# we want the actual log file to be in the sandbox;
@@ -731,13 +751,6 @@ if isFlagSet SANDBOX ; then
 	declare RealLogPath="${WorkDir}/${JobName}.log"
 	mv "$LogPath" "$RealLogPath"
 	ln -s "$(basename "$WorkDir")/$(basename "$RealLogPath")" "$LogPath"
-	
-	# instead, we copy the configuration file in the working area;
-	# this helps keeping track of what was actually used
-	if [[ -r "$FullConfigPath" ]]; then
-		cp -a "$FullConfigPath" "$WorkDir"
-		ConfigPath="./$(basename "$FullConfigPath")"
-	fi
 	
 	for (( iSource = 0 ; iSource < ${#SourceFiles[@]} ; ++iSource )); do
 		SourceFile="${SourceFiles[iSource]}"
@@ -755,6 +768,49 @@ if isFlagSet SANDBOX ; then
 	
 	pushd "$WorkDir" > /dev/null || FATAL 3 "Can't use the working directory '${WorkDir}'"
 fi
+
+# copy the configuration file in the working area;
+# this helps keeping track of what was actually used
+declare LocalConfigPath="$FullConfigName"
+if [[ -r "$FullConfigPath" ]]; then
+	LocalConfigPath="${ConfigName}.fcl"
+	# if they differ, copy the config file (and mercyless overwrite the existing one)
+	if [[ ! -f "$LocalConfigPath" ]] || ! cmp -s "$LocalConfigPath" "$FullConfigPath" ; then
+		cp -a "$FullConfigPath" "$LocalConfigPath"
+	fi
+fi
+
+# copy the file with the seeds to be restored in the final destination
+if [[ -n "$RestoreSeed" ]] && [[ ! -r "$RestoreSeed" ]]; then
+	mkdir -p "$(dirname "$RestoreSeed")"
+	cp -a "$SavedSeed" "$RestoreSeed"
+fi
+
+#
+# create the FCL file wrapper
+#
+declare WrappedConfigName="${JobName}-larrunwrapper.fcl"
+declare WrappedConfigPath="$WrappedConfigName"
+if isFlagSet UseConfigWrapper ; then
+	cat <<-EOH > "$WrappedConfigName"
+	# ******************************************************************************
+	# Configuration wrapper for '${FullConfigPath}'
+	#   created by ${USER} via ${SCRIPTNAME} on $(date)
+	#   expected output directory: '${WorkDir}'
+	# ******************************************************************************
+	
+	# main FCL file:
+	
+	#include "${LocalConfigPath}"
+	
+	# additional (optional) setting override
+	EOH
+	
+else
+	WrappedConfigName="$FullConfigName"
+	WrappedConfigPath="$WrappedConfigName"
+fi
+
 
 #
 # expand lar parameters
@@ -774,7 +830,7 @@ LASTFATAL "Error setting up the profiling tool '${Profiler}'. Quitting."
 # execute the command
 #
 declare -a BaseCommand
-BaseCommand=( lar -c "$ConfigPath" "${SourceParams[@]}" "${LArParams[@]}" )
+BaseCommand=( lar -c "$WrappedConfigPath" "${SourceParams[@]}" "${LArParams[@]}" )
 
 declare -a Command
 SetupCommand "${BaseCommand[@]}"
@@ -788,8 +844,9 @@ trap InterruptHandler SIGINT
 echo "$(date) --- starting ---------------------------------------------------"
 cat <<EOM > "$AbsoluteLogPath"
 ================================================================================
+Script:       ${SCRIPTNAME} version ${SCRIPTVERSION:-"unknown"}
 Job name:    '${JobName}'
-Config file: '${FullConfigPath}'
+Base config: '${FullConfigPath}'
 Host:         $(hostname)
 Directory:    $(pwd)
 Executing:    ${Command[@]}
