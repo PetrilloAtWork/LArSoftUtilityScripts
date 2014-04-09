@@ -19,11 +19,14 @@
 #     find the FCL find on our own, copy it into the sandbox;
 #     added output of the configuration file found
 # 1.6 (petrillo@fnal.gov)
-#     support for random seed restore file
+#     support for random seed restore file;
+#     stub for wrapped configuration file
+# 1.7 (petrillo@fnal.gov)
+#     automatically modify the configuration file to include seed restoration
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.6"
+SCRIPTVERSION="1.7"
 
 DATETAG="$(datetag)"
 
@@ -182,6 +185,24 @@ function IsInList() {
 	done
 	return 1
 } # IsInList()
+
+function isAbsolute() {
+	local Path="$1"
+	[[ "${Path:0:1}" == '/' ]]
+} # isAbsolute()
+
+
+function MakeAbsolute() {
+	local Path="$1"
+	local Cwd="${2:-"$(pwd)"}"
+	[[ -n "$Path" ]] || return 0
+	if isAbsolute "$Path" ; then
+		echo "$Path"
+	else
+		echo "${Cwd:+${Cwd}/}${Path}"
+	fi
+	return 0
+} # MakeAbsolute()
 
 
 function FindNextFile() {
@@ -552,9 +573,9 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 				SavedSeed="${Param#--*=}"
 				if [[ "${SavedSeed/@}" != "$SavedSeed" ]]; then
 					RestoreSeed="${SavedSeed#*@}"
-					SavedSeed="${SavedSeed%@RestoreSeed}"
+					SavedSeed="${SavedSeed%@${RestoreSeed}}"
 				else
-					RestoreSeed="$SavedSeed"
+					RestoreSeed="$(basename "$SavedSeed")"
 				fi
 				;;
 			
@@ -716,6 +737,7 @@ declare FullConfigPath="$(FindFCLfile "$UserConfigPath")"
 # (it might be the wrong one, but it's well identified
 # and if the user is not happy he/she can fix it)
 declare ConfigPath="${FullConfigPath:-${UserConfigPath}}"
+declare AbsConfigPath="$(MakeAbsolute "$ConfigPath")"
 
 declare LogPath
 LogPath="$(FindNextLogFile "$JobBaseName")"
@@ -735,7 +757,9 @@ mkdir -p "$LogDir"
 [[ -d "$LogDir" ]] || FATAL 3 "Can't create the log directory '${LogDir}'."
 touch "$LogPath" || FATAL 2 "Can't create the log file '${LogPath}'."
 
-declare AbsoluteLogPath="$(readlink -f "$LogPath")"
+declare AbsoluteLogPath="$(MakeAbsolute "$LogPath")"
+
+declare AbsoluteSavedSeed="$(MakeAbsolute "$SavedSeed")"
 
 #
 # prepare an empty sandbox
@@ -762,8 +786,7 @@ if isFlagSet SANDBOX ; then
 	# turn all the path parameters to absolute
 	for iParam in "${PathParams[@]}" ; do
 		Param="${LArParams[iParam]}"
-		[[ "${Param:0:1}" == '/' ]] && continue
-		LArParams[iParam]="$(pwd)/${Param}"
+		LArParams[iParam]="$(MakeAbsolute "$Param")"
 	done
 	
 	pushd "$WorkDir" > /dev/null || FATAL 3 "Can't use the working directory '${WorkDir}'"
@@ -771,28 +794,25 @@ fi
 
 # copy the configuration file in the working area;
 # this helps keeping track of what was actually used
-declare LocalConfigPath="$FullConfigName"
-if [[ -r "$FullConfigPath" ]]; then
+declare LocalConfigPath="$FullConfigPath"
+if [[ -r "$AbsConfigPath" ]]; then
 	LocalConfigPath="${ConfigName}.fcl"
 	# if they differ, copy the config file (and mercyless overwrite the existing one)
-	if [[ ! -f "$LocalConfigPath" ]] || ! cmp -s "$LocalConfigPath" "$FullConfigPath" ; then
-		cp -a "$FullConfigPath" "$LocalConfigPath"
+	if [[ ! -f "$LocalConfigPath" ]] || ! cmp -s "$LocalConfigPath" "$AbsConfigPath" ; then
+		cp -a "$AbsConfigPath" "$LocalConfigPath"
 	fi
-fi
-
-# copy the file with the seeds to be restored in the final destination
-if [[ -n "$RestoreSeed" ]] && [[ ! -r "$RestoreSeed" ]]; then
-	mkdir -p "$(dirname "$RestoreSeed")"
-	cp -a "$SavedSeed" "$RestoreSeed"
 fi
 
 #
 # create the FCL file wrapper
 #
-declare WrappedConfigName="${JobName}-larrunwrapper.fcl"
-declare WrappedConfigPath="$WrappedConfigName"
+declare WrappedConfigPath="$FullConfigPath"
+declare WrappedConfigName="$(basename "$WrappedConfigPath")"
 if isFlagSet UseConfigWrapper ; then
-	cat <<-EOH > "$WrappedConfigName"
+	WrappedConfigName="${JobName}-larrunwrapper.fcl"
+	WrappedConfigPath="$WrappedConfigName"
+	
+	cat <<-EOH > "$WrappedConfigPath"
 	# ******************************************************************************
 	# Configuration wrapper for '${FullConfigPath}'
 	#   created by ${USER} via ${SCRIPTNAME} on $(date)
@@ -806,11 +826,35 @@ if isFlagSet UseConfigWrapper ; then
 	# additional (optional) setting override
 	EOH
 	
-else
-	WrappedConfigName="$FullConfigName"
-	WrappedConfigPath="$WrappedConfigName"
+	if isFlagSet SANDBOX ; then
+		# little hack: try to make sure that lar always look at this directory first
+		# for FCL files, so that it finds immediately our wrapper *and* the FCL file
+		# the wrapper includes;
+		# this is not safe outside the sandbox since there could be other FCL files
+		# in the current directory, which would override in an unexpected way the
+		# others in case of inclusion (very unlikely, but a real nightmare to verify)
+		FHICL_FILE_PATH=".:${FHICL_FILE_PATH}"
+	fi
 fi
 
+
+# copy the file with the seeds to be restored in the final destination
+if [[ -n "$RestoreSeed" ]] && [[ ! -r "$RestoreSeed" ]]; then
+	mkdir -p "$(dirname "$RestoreSeed")"
+	cp -a "$AbsoluteSavedSeed" "$RestoreSeed"
+fi
+
+if [[ -r "$RestoreSeed" ]]; then
+	if isFlagSet UseConfigWrapper ; then
+		cat <<-EOI >> "$WrappedConfigPath"
+		
+		# restore random generator seeds from a file:
+		services.RandomNumberGenerator.restoreFrom: "${RestoreSeed}"
+		EOI
+	else
+		WARN "The directive to restore random seeds from '${RestoreSeed}' must be already in the configuration file."
+	fi
+fi
 
 #
 # expand lar parameters
@@ -859,11 +903,7 @@ $(PrintPackageVersions "${StandardPackages[@]}")
 EOM
 
 if isFlagSet DUMPCONFIG ; then
-	if isFlagSet SANDBOX ; then
-		export ART_DEBUG_CONFIG="${JobBaseName}.cfg"
-	else
-		export ART_DEBUG_CONFIG="${JobName}.cfg"
-	fi
+	export ART_DEBUG_CONFIG="${JobName}.cfg"
 	echo "Configuration dump into: '${ART_DEBUG_CONFIG}'" >> "$AbsoluteLogPath"
 	"${BaseCommand[@]}" > /dev/null
 	echo "================================================================================" >> "$AbsoluteLogPath"
