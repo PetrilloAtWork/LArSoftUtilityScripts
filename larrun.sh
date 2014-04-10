@@ -110,7 +110,7 @@ function help() {
 	    use FILENAME as the file to restore the random seed, optionally changing
 	    its name/location into ALIAS; currently the FCL file must have the ALIAS
 	    path already in, for this to work
-	--prepend=FILE
+	--precfg=FILE
 	--include=FILE
 	    includes FILE in the FCL: the first option includes FILE before the main
 	    FCL file, the second after it; multiple files can be specified by using
@@ -674,7 +674,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 		#	( '-s' )                       let ++iParam ; SourceFiles=( "${SourceFiles[@]}" "${!iParam}" ) ;;
 			( '--jobname='* )              JobBaseName="${Param#--*=}" ;;
 			( '--nowrap' )                 UseConfigWrapper=0 ;;
-			( '--prepend='* )              PrependConfigFiles=( "${PrependConfigFiles[@]}" "${Param#--*=}" ) ;;
+			( '--precfg='* )               PrependConfigFiles=( "${PrependConfigFiles[@]}" "${Param#--*=}" ) ;;
 			( '--include='* )              AppendConfigFiles=( "${AppendConfigFiles[@]}" "${Param#--*=}" ) ;;
 			( '--seed='* )
 				SavedSeed="${Param#--*=}"
