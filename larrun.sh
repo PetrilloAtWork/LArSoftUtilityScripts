@@ -23,10 +23,12 @@
 #     stub for wrapped configuration file
 # 1.7 (petrillo@fnal.gov)
 #     automatically modify the configuration file to include seed restoration
+# 1.8 (petrillo@fnal.gov)
+#     support including FCL files on the fly
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.7"
+SCRIPTVERSION="1.8"
 
 DATETAG="$(datetag)"
 
@@ -99,10 +101,20 @@ function help() {
 	    print on the screen the LARSoft UPS packages set up, and exit
 	--norun , -N
 	    does not actually run (use to debug ${SCRIPTNAME})
+	
+	 (configuration options)
+	--nowrap
+	    do not use a FCL wrapper; some of the following features will not be
+	    available in that case
 	--seed=FILENAME[@ALIAS]
 	    use FILENAME as the file to restore the random seed, optionally changing
 	    its name/location into ALIAS; currently the FCL file must have the ALIAS
 	    path already in, for this to work
+	--prepend=FILE
+	--include=FILE
+	    includes FILE in the FCL: the first option includes FILE before the main
+	    FCL file, the second after it; multiple files can be specified by using
+	    these options multiple times
 	
 	 (profiling options)
 	--prepend=Executable
@@ -173,6 +185,35 @@ function LASTFATAL() {
 	local Code="$?"
 	[[ "$Code" != 0 ]] && FATAL "$Code""$@"
 } # LASTFATAL()
+
+function isDebugging() {
+	isFlagSet DEBUG
+}
+
+function DBG() {
+	isDebugging && STDERR "${DebugColor}DBG| $*${ResetColor}"
+} # DBG()
+
+function DBGN() {
+	# DBGN DebugLevel Debug Message
+	# Debug message is printed only if current DEBUG level is bigger or equal to
+	# DebugLevel.
+	local -i DebugLevel="$1"
+	shift
+	[[ -n "$DEBUG" ]] && [[ "$DEBUG" -ge "$DebugLevel" ]] && DBG "$*"
+} # DBGN()
+
+function DUMPVAR() {
+	local VarName="$1"
+	DBG "'${VarName}'='${!VarName}'"
+} # DUMPVAR()
+
+function DUMPVARS() {
+	local VarName
+	for VarName in "$@" ; do
+		DUMPVAR "$VarName"
+	done
+} # DUMPVARS()
 
 function datetag() { date '+%Y%m%d' ; }
 
@@ -516,6 +557,65 @@ function FindFCLfile() {
 } # FindFCLfile()
 
 
+function ImportFileInWorkArea() {
+	#
+	# ImportFileInWorkArea ORIG WORKAREA [DEST]
+	#
+	# Copies ORIG into DEST (file or directory specification).
+	# Prints the name of DEST relative to WORKAREA.
+	# If WORKAREA is not specified, it's assumed to be the current directory.
+	# If DEST is not specified, it's assumed to be an entity with the same name
+	# as ORIG, in the WORKAREA. If it is specified as a relative path, it is
+	# created under that path inside the WORKAREA
+	#
+	local OriginalPath="$1"
+	local WorkArea="${2:-'.'}"
+	local DestPath="$3"
+	
+	local BaseName="$(basename "$OriginalPath")"
+	
+	if [[ -z "$DestPath" ]]|| ! isAbsolute "$DestPath" ; then
+		DestPath="${WorkArea%/}/${DestPath}"
+	fi
+	
+	# add the name of the destination file to the destination path,
+	# unless the destination path does not exist yet or is not a directory
+	# (and unless the original path is actually a known directory)
+	[[ -d "$DestPath" ]] && [[ -e "$OriginalPath" ]] && [[ ! -d "$OriginalPath" ]] && DestPath="${DestPath%/}/${BaseName}"
+	
+	if [[ ! -r "$OriginalPath" ]]; then
+		echo "$OriginalPath"
+		return 1
+	fi
+	
+	if [[ -d "$OriginalPath" ]] || [[ ! -f "$DestPath" ]] || ! cmp -s "$OriginalPath" "$DestPath" ; then
+		DBG "Copying '${OriginalPath}' into '${DestPath}'"
+		mkdir -p "$(dirname "$DestPath")"
+		cp -a "$OriginalPath" "$DestPath"
+	fi
+	# if the destination is plainly in the working area,
+	# print only the relative path to it; otherwise print the absolute path
+	if [[ "${DestPath#${WorkArea}}" != "$DestPath" ]]; then
+		local RelPath="${DestPath#${WorkArea}}"
+		[[ "${RelPath:0:1}" == '/' ]] && RelPath="${RelPath:1}"
+		echo "$RelPath"
+		DBG "  (relative path to '${WorkArea}': '${RelPath}')"
+	else
+		MakeAbsolute "$DestPath"
+	fi
+	return 0
+} # ImportFileInWorkArea()
+
+
+function ImportFCLfileInWorkArea() {
+	local OriginalPath="$1"
+	local DestPath="$2"
+	
+	local ResolvedPath="$(FindFCLfile "$OriginalPath")"
+	
+	ImportFileInWorkArea "${ResolvedPath:-"$OriginalPath"}" "$DestPath"
+} # ImportFCLfileInWorkArea()
+
 
 function InterruptHandler() {
 	echo
@@ -546,6 +646,8 @@ declare -a SourceFiles
 declare -a PrependExecutable
 declare -a PrependExecutableParameters
 declare -i PrependExecutableNParameters
+declare -a PrependConfigFiles
+declare -a AppendConfigFiles
 declare -i OneStringCommand=0
 for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
@@ -553,6 +655,9 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 		case "$Param" in
 			( '--help' | '-h' | '-?' )     DoHelp=1  ;;
 			( '--version' | '-V' )         DoVersion=1  ;;
+			( '--debug' )                  DEBUG=1  ;;
+			( '--debug='* )                DEBUG="${Param#--*=}" ;;
+			( '-d' )                       let ++iParam ; DEBUG="${!iParam}" ;;
 			( '--printenv' | '-E' )        OnlyPrintEnvironment=1  ;;
 			( '--norun' | '-N' )           DontRun=1  ;;
 			
@@ -569,6 +674,8 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 		#	( '-s' )                       let ++iParam ; SourceFiles=( "${SourceFiles[@]}" "${!iParam}" ) ;;
 			( '--jobname='* )              JobBaseName="${Param#--*=}" ;;
 			( '--nowrap' )                 UseConfigWrapper=0 ;;
+			( '--prepend='* )              PrependConfigFiles=( "${PrependConfigFiles[@]}" "${Param#--*=}" ) ;;
+			( '--include='* )              AppendConfigFiles=( "${AppendConfigFiles[@]}" "${Param#--*=}" ) ;;
 			( '--seed='* )
 				SavedSeed="${Param#--*=}"
 				if [[ "${SavedSeed/@}" != "$SavedSeed" ]]; then
@@ -732,12 +839,6 @@ declare ConfigName="$(basename "${ConfigFile%.fcl}")"
 declare UserConfigPath="$ConfigFile"
 declare FullConfigPath="$(FindFCLfile "$UserConfigPath")"
 [[ -z "$FullConfigPath" ]] && WARN "Could not find the configuration file '${UserConfigPath}'"
-# ConfigPath is the configuration actually passed to lar;
-# by default, we give it to lar what we found
-# (it might be the wrong one, but it's well identified
-# and if the user is not happy he/she can fix it)
-declare ConfigPath="${FullConfigPath:-${UserConfigPath}}"
-declare AbsConfigPath="$(MakeAbsolute "$ConfigPath")"
 
 declare LogPath
 LogPath="$(FindNextLogFile "$JobBaseName")"
@@ -758,8 +859,6 @@ mkdir -p "$LogDir"
 touch "$LogPath" || FATAL 2 "Can't create the log file '${LogPath}'."
 
 declare AbsoluteLogPath="$(MakeAbsolute "$LogPath")"
-
-declare AbsoluteSavedSeed="$(MakeAbsolute "$SavedSeed")"
 
 #
 # prepare an empty sandbox
@@ -789,19 +888,40 @@ if isFlagSet SANDBOX ; then
 		LArParams[iParam]="$(MakeAbsolute "$Param")"
 	done
 	
-	pushd "$WorkDir" > /dev/null || FATAL 3 "Can't use the working directory '${WorkDir}'"
 fi
 
-# copy the configuration file in the working area;
+#
+# copy files in the working area
+#
+
+# configuration file
 # this helps keeping track of what was actually used
-declare LocalConfigPath="$FullConfigPath"
-if [[ -r "$AbsConfigPath" ]]; then
-	LocalConfigPath="${ConfigName}.fcl"
-	# if they differ, copy the config file (and mercyless overwrite the existing one)
-	if [[ ! -f "$LocalConfigPath" ]] || ! cmp -s "$LocalConfigPath" "$AbsConfigPath" ; then
-		cp -a "$AbsConfigPath" "$LocalConfigPath"
-	fi
-fi
+
+# ConfigPath is the configuration actually passed to lar;
+# by default, we give it to lar what we found
+# (it might be the wrong one, but it's well identified
+# and if the user is not happy he/she can fix it)
+
+declare ConfigPath="$(ImportFCLfileInWorkArea "${FullConfigPath:-${UserConfigPath}}" "$WorkDir" )"
+
+# copy all the prepended and appended FCL files
+declare -a PrependConfigPaths
+for IncludeFile in "${PrependConfigFiles[@]}" ; do
+	PrependConfigPaths=( "${PrependConfigPaths[@]}" "$(ImportFCLfileInWorkArea "$IncludeFile" "$WorkDir" )" )
+done
+declare -a AppendConfigPaths
+for IncludeFile in "${AppendConfigFiles[@]}" ; do
+	AppendConfigPaths=( "${AppendConfigPaths[@]}" "$(ImportFCLfileInWorkArea "$IncludeFile" "$WorkDir" )" )
+done
+
+# copy the file with the seeds to be restored in the final destination
+RestoreSeed="$(ImportFileInWorkArea "$SavedSeed" "$WorkDir" "$RestoreSeed")"
+
+
+#
+# time to move into the working area (if any)
+#
+[[ "$WorkDir" == "." ]] || pushd "$WorkDir" > /dev/null || FATAL 3 "Can't use the working directory '${WorkDir}'"
 
 #
 # create the FCL file wrapper
@@ -818,13 +938,36 @@ if isFlagSet UseConfigWrapper ; then
 	#   created by ${USER} via ${SCRIPTNAME} on $(date)
 	#   expected output directory: '${WorkDir}'
 	# ******************************************************************************
+	EOH
+	
+	if [[ "${#PrependConfigPaths[@]}" -gt 0 ]]; then
+		cat <<-EOI >> "$WrappedConfigPath"
+		
+		# prepending additional configuration files:
+		EOI
+		for IncludeFile in "${PrependConfigPaths[@]}" ; do
+			echo "#include \"${IncludeFile}\"" >> "$WrappedConfigPath"
+		done
+	fi
+	
+	cat <<-EOC >> "$WrappedConfigPath"
 	
 	# main FCL file:
 	
-	#include "${LocalConfigPath}"
+	#include "${ConfigPath}"
+	EOC
 	
-	# additional (optional) setting override
-	EOH
+	if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
+		cat <<-EOI >> "$WrappedConfigPath"
+		
+		# including additional configuration files:
+		EOI
+		for IncludeFile in "${AppendConfigPaths[@]}" ; do
+			echo "#include \"${IncludeFile}\"" >> "$WrappedConfigPath"
+		done
+	fi
+	
+	echo -e "\n# additional (optional) setting override" >> "$WrappedConfigPath"
 	
 	if isFlagSet SANDBOX ; then
 		# little hack: try to make sure that lar always look at this directory first
@@ -835,14 +978,11 @@ if isFlagSet UseConfigWrapper ; then
 		# others in case of inclusion (very unlikely, but a real nightmare to verify)
 		FHICL_FILE_PATH=".:${FHICL_FILE_PATH}"
 	fi
+else
+	[[ "${#AppendConfigFiles[@]}" -eq 0 ]] || FATAL 1 "Can't include additional configuration files when config wrapping is disabled."
+	[[ "${#PrependConfigFiles[@]}" -eq 0 ]] || FATAL 1 "Can't prepend additional configuration files when config wrapping is disabled."
 fi
 
-
-# copy the file with the seeds to be restored in the final destination
-if [[ -n "$RestoreSeed" ]] && [[ ! -r "$RestoreSeed" ]]; then
-	mkdir -p "$(dirname "$RestoreSeed")"
-	cp -a "$AbsoluteSavedSeed" "$RestoreSeed"
-fi
 
 if [[ -r "$RestoreSeed" ]]; then
 	if isFlagSet UseConfigWrapper ; then
@@ -897,6 +1037,22 @@ Executing:    ${Command[@]}
 Log file:    '${LogPath}'
 Date:         $(date)
 Run with:     ${0} ${@}
+EOM
+if [[ "${#PrependConfigPaths[@]}" -gt 0 ]]; then
+	let -i iFile=0
+	echo "Prepended:   \"${PrependConfigPaths[iFile++]}\"" >> "$AbsoluteLogPath"
+	while [[ $iFile -lt "${#PrependConfigPaths[@]}" ]]; do
+		echo "             \"${PrependConfigPaths[iFile++]}\"" >> "$AbsoluteLogPath"
+	done
+fi
+if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
+	let -i iFile=0
+	echo "Appended:    \"${AppendConfigPaths[iFile++]}\"" >> "$AbsoluteLogPath"
+	while [[ $iFile -lt "${#AppendConfigPaths[@]}" ]]; do
+		echo "             \"${AppendConfigPaths[iFile++]}\"" >> "$AbsoluteLogPath"
+	done
+fi
+cat <<EOM >> "$AbsoluteLogPath"
 ================================================================================
 $(PrintPackageVersions "${StandardPackages[@]}")
 ================================================================================
