@@ -27,10 +27,12 @@
 #     support including FCL files on the fly
 # 1.9 (petrillo@fnal.gov)
 #     support including FCL directives on the fly
+# 1.10 (petrillo@fnal.gov)
+#     change the description of the GIT packages (from the commit to describe)
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.9"
+SCRIPTVERSION="1.10"
 
 DATETAG="$(datetag)"
 
@@ -493,10 +495,16 @@ function PrintLocalPackage() {
 		echo -n " from local area"
 		if [[ -d "${MRB_SOURCE}/${Package}" ]]; then
 			pushd "${MRB_SOURCE}/${Package}" >& /dev/null
-			local GITCommitHash="$(git log --pretty='%H %ci' -n 1)"
+			local GITdescribe
+			GITdescribe="$(git describe)"
+			if [[ $? == 0 ]]; then
+				echo -n " => GIT ${GITdescribe}"
+			else
+				local GITCommitHash="$(git log --pretty='%H %ci' -n 1)"
+				echo -n " => GIT commit ${GITCommitHash}"
+			fi
 			popd >& /dev/null
 			
-			echo -n " => GIT commit ${GITCommitHash}"
 		else
 			echo -n " => source not found!"
 		fi
