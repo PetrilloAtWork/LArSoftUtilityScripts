@@ -25,10 +25,12 @@
 #     automatically modify the configuration file to include seed restoration
 # 1.8 (petrillo@fnal.gov)
 #     support including FCL files on the fly
+# 1.9 (petrillo@fnal.gov)
+#     support including FCL directives on the fly
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.8"
+SCRIPTVERSION="1.9"
 
 DATETAG="$(datetag)"
 
@@ -115,6 +117,11 @@ function help() {
 	    includes FILE in the FCL: the first option includes FILE before the main
 	    FCL file, the second after it; multiple files can be specified by using
 	    these options multiple times
+	--inject=FCLdirective
+	    appends the specified FCL line at the end of the FCL file (also after the
+	    inclusion of the optional configuration by --include option); multiple
+	    directives can be specified by using this options multiple times;
+	    do not abuse it: it makes harder to rerun jobs!
 	
 	 (profiling options)
 	--prepend=Executable
@@ -648,6 +655,7 @@ declare -a PrependExecutableParameters
 declare -i PrependExecutableNParameters
 declare -a PrependConfigFiles
 declare -a AppendConfigFiles
+declare -a AppendConfigLines
 declare -i OneStringCommand=0
 for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
@@ -676,6 +684,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--nowrap' )                 UseConfigWrapper=0 ;;
 			( '--precfg='* )               PrependConfigFiles=( "${PrependConfigFiles[@]}" "${Param#--*=}" ) ;;
 			( '--include='* )              AppendConfigFiles=( "${AppendConfigFiles[@]}" "${Param#--*=}" ) ;;
+			( '--inject='* )               AppendConfigLines=( "${AppendConfigLines[@]}" "${Param#--*=}" ) ;;
 			( '--seed='* )
 				SavedSeed="${Param#--*=}"
 				if [[ "${SavedSeed/@}" != "$SavedSeed" ]]; then
@@ -967,6 +976,16 @@ if isFlagSet UseConfigWrapper ; then
 		done
 	fi
 	
+	if [[ "${#AppendConfigLines[@]}" -gt 0 ]]; then
+		cat <<-EOI >> "$WrappedConfigPath"
+		
+		# including additional configuration from command line:
+		EOI
+		for ConfigLine in "${AppendConfigLines[@]}" ; do
+			echo "$ConfigLine" >> "$WrappedConfigPath"
+		done
+	fi
+	
 	echo -e "\n# additional (optional) setting override" >> "$WrappedConfigPath"
 	
 	if isFlagSet SANDBOX ; then
@@ -979,6 +998,7 @@ if isFlagSet UseConfigWrapper ; then
 		FHICL_FILE_PATH=".:${FHICL_FILE_PATH}"
 	fi
 else
+	[[ "${#AppendConfigLines[@]}" -eq 0 ]] || FATAL 1 "Can't inject additional configuration lines when config wrapping is disabled."
 	[[ "${#AppendConfigFiles[@]}" -eq 0 ]] || FATAL 1 "Can't include additional configuration files when config wrapping is disabled."
 	[[ "${#PrependConfigFiles[@]}" -eq 0 ]] || FATAL 1 "Can't prepend additional configuration files when config wrapping is disabled."
 fi
@@ -1050,6 +1070,13 @@ if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
 	echo "Appended:    \"${AppendConfigPaths[iFile++]}\"" >> "$AbsoluteLogPath"
 	while [[ $iFile -lt "${#AppendConfigPaths[@]}" ]]; do
 		echo "             \"${AppendConfigPaths[iFile++]}\"" >> "$AbsoluteLogPath"
+	done
+fi
+if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
+	let -i iFile=0
+	echo "Additional configuration:" >> "$AbsoluteLogPath"
+	for ConfigLine in "${#AppendConfigLines[@]}" ; do
+		echo "    ${ConfigLine}" >> "$AbsoluteLogPath"
 	done
 fi
 cat <<EOM >> "$AbsoluteLogPath"
