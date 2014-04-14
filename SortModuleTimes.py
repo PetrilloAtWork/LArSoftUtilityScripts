@@ -8,6 +8,8 @@
 #   first version
 # 1.1 (petrillo@fnal.gov)
 #   support for compressed input files; added command line interface
+# 1.2 (petrillo@fnal.gov)
+#   new mode to expose all the events
 #
 
 import sys, os
@@ -18,7 +20,7 @@ except ImportError: pass
 
 import optparse
 
-Version = "%prog 1.1"
+Version = "%prog 1.2"
 UsageMsg = """Prints statistics of the module timings based on the information from
 the Timing service.
 
@@ -91,20 +93,25 @@ class TimeModuleStatsClass(Stats):
 	def __init__(self, moduleKey, bTrackEntries = False):
 		Stats.__init__(self)
 		self.key = moduleKey
-		self.entries = set() if bTrackEntries else None
+		if bTrackEntries:
+			self.entries = []
+			self.entryKeys = set()
+		else:
+			self.entries = self.entryKeys = None
 	# __init__()
 	
 	def add(self, data):
 		if self.entries is not None:
 			eventKey = ( data['run'], data['subRun'], data['event'], )
-			if eventKey in self.entries: return False
-			self.entries.add(eventKey)
+			if eventKey in self.entryKeys: return False
+			self.entries.append(data)
+			self.entryKeys.add(eventKey)
 		# if
 		Stats.add(self, data['time'])
 		return True
 	# add()
 	
-	def FormatAsList(self, format_ = None):
+	def FormatStatsAsList(self, format_ = None):
 		if isinstance(self.key, basestring): name = str(self.key)
 		else: name = "%s[%s]" % (self.key[1], self.key[0])
 		if (self.n() == 0) or (self.sum() == 0.):
@@ -117,7 +124,73 @@ class TimeModuleStatsClass(Stats):
 			"total %g\"" % self.sum(), "(%d events:" % self.n(),
 			"%g" % self.min(), "- %g)" % self.max(),
 			]
-	# FormatAsList()
+	# FormatStatsAsList()
+	
+	def FormatTimesAsList(self, format_ = {}):
+		if isinstance(self.key, basestring): name = str(self.key)
+		else: name = "%s[%s]" % (self.key[1], self.key[0])
+		
+		n = min(self.n(), format_.get('max_events', self.n()))
+		format_str = format_.get('format', '%g')
+		if not self.entries: return [ name, ] + [ "n/a", ] * n
+		
+		return [ name, ] \
+		  + [ format_str % entry['time'] for entry in self.entries[:n] ]
+	# FormatTimesAsList()
+	
+# class TimeModuleStatsClass
+
+class JobStatsClass:
+	def __init__(self, jobName = None):
+		self.name = jobName
+		self.moduleList = []
+		self.moduleStats = {}
+	# __init__()
+	
+	def MaxEvents(self):
+		if not self.moduleList: return 0
+		return max(map(Stats.n, self.moduleList))
+	# MaxEvents()
+	
+	def MinEvents(self):
+		if not self.moduleList: return 0
+		return min(map(Stats.n, self.moduleList))
+	# MinEvents()
+	
+	
+	# replicate some list/dictionary interface
+	def __iter__(self): return iter(self.moduleList)
+	def __len__(self): return len(self.moduleList)
+	def __getitem__(self, key):
+		if isinstance(key, int): return self.moduleList.__getitem__(key)
+		else:                    return self.moduleStats.__getitem__(key)
+	# __getitem__()
+	def __setitem__(self, key, value):
+		if isinstance(key, int):
+			if key < len(self.moduleList):
+				if self.moduleList[key].key != value.key:
+					raise RuntimeError(
+					  "Trying to overwrite stats of module %r at #%d with module %r"
+					  % (self.moduleList[key].key, key, value.key)
+					  )
+				# if key mismatch
+			else:
+				self.moduleList.extend([ None ] * (key - len(self.moduleList) + 1))
+			index = key
+			key = value.key
+		else:
+			try:
+				stats = self.moduleStats[key]
+				index = self.moduleList.index(stats)
+			except KeyError: # new stats
+				index = len(self.moduleList)
+				self.moduleList.append(None)
+			#
+		# if ... else
+		self.moduleStats[key] = value
+		self.moduleList[index] = value
+	# __setitem__()
+# class JobStatsClass
 
 #
 # format parsing
@@ -240,84 +313,168 @@ def JustifyString(s, w, f = ' '):
 # JustifyString()
 
 
-def TabularAlignment(tabledata, specs = [ None, ]):
-	"""Formats list of data in a table
+class TabularAlignmentClass:
+	"""Formats list of data in a table"""
+	def __init__(self, specs = [ None, ]):
+		"""
+		Each format specification applies to one item in each row.
+		If no format specification is supplied for an item, the last used format is
+		applied. By default, that is a plain conversion to string.
+		"""
+		self.tabledata = []
+		self.formats = {}
+		if specs: self.SetDefaultFormats(specs)
+	# __init__()
 	
-	Each format specification applies to one item in each row.
-	If no format specification is supplied for an item, the last used format is
-	applied. By default, that is a plain conversion to string.
-	"""
+	class LineIdentifierClass:
+		def __init__(self): pass
+		def __call__(self, iLine, rawdata): return None
+	# class LineIdentifierClass
 	
-	# parse the format specifications
-	Specs = []
-	for iSpec, spec in enumerate(specs):
+	class CatchAllLines(LineIdentifierClass):
+		def __call__(self, iLine, rawdata): return 1
+	# class CatchAllLines
+	
+	class LineNo(LineIdentifierClass):
+		def __init__(self, lineno, success_factor = 5.):
+			TabularAlignmentClass.LineIdentifierClass.__init__(self)
+			if isinstance(lineno, int): self.lineno = [ lineno ]
+			else:                       self.lineno = lineno
+			self.success_factor = success_factor
+		# __init__()
+		
+		def matchLine(self, lineno, iLine, rawdata):
+			if lineno < 0: lineno = len(rawdata) + lineno
+			return iLine == lineno
+		# matchLine
+		
+		def __call__(self, iLine, rawdata):
+			success = 0.
+			for lineno in self.lineno:
+				if self.matchLine(lineno, iLine, rawdata): success += 1.
+			if success == 0: return None
+			if self.success_factor == 0.: return 1.
+			else:                         return success * self.success_factor
+		# __call__()
+	# class LineNo
+	
+	class FormatNotSupported(Exception): pass
+	
+	def ParseFormatSpec(self, spec):
 		SpecData = {}
 		if spec is None: SpecData['format'] = str
 		elif isinstance(spec, basestring): SpecData['format'] = spec
-		elif isinstance(spec, dict): SpecData = spec
-		else:
-			raise RuntimeError("Format specification %r (#%d) not supported."
-			  % (spec, iSpec))
-		Specs.append(SpecData)
-	# for specifications
+		elif isinstance(spec, dict):
+			SpecData = spec
+			SpecData.setdefault('format', str)
+		else: raise TabularAlignmentClass.FormatNotSupported(spec)
+		return SpecData
+	# ParseFormatSpec()
 	
-	# format all the items
-	ItemLengths = MaxItemLengthsClass()
-	TableContent = []
-	for rowdata in tabledata:
-		LineContent = []
-		LastSpec = None
-		for iItem, itemdata in enumerate(rowdata):
+	def SetRowFormats(self, rowSelector, specs):
+		# parse the format specifications
+		formats = []
+		for iSpec, spec in enumerate(specs):
 			try:
-				Spec = Specs[iItem]
-				LastSpec = Spec
-			except IndexError: Spec = LastSpec
-			
-			Formatter = Spec['format']
-			if isinstance(Formatter, basestring):
-				ItemContent = Formatter % itemdata
-			elif callable(Formatter):
-				ItemContent = Formatter(itemdata)
-			else:
-				raise RuntimeError("Formatter %r (#%d) not supported."
-				  % (Formatter, iItem))
-			# if ... else
-			LineContent.append(ItemContent)
-		# for items
-		ItemLengths.add(LineContent)
-		TableContent.append(LineContent)
-	# for rows
+				formats.append(self.ParseFormatSpec(spec))
+			except TabularAlignmentClass.FormatNotSupported, e:
+				raise RuntimeError("Format specification %r (#%d) not supported."
+				  % (str(e), iSpec))
+		# for specifications
+		self.formats[rowSelector] = formats
+	# SetRowFormats()
 	
-	# pad the objects
-	for rowdata in TableContent:
-		for iItem, item in enumerate(rowdata):
-			try:
-				Spec = Specs[iItem]
-				LastSpec = Spec
-			except IndexError: Spec = LastSpec
-			
-			fieldWidth = ItemLengths[iItem]
-			alignment = Spec.get('align', 'left')
-			if alignment == 'right':
-				alignedItem = RightString(item, fieldWidth)
-			elif alignment == 'justified':
-				alignedItem = JustifyString(item, fieldWidth)
-			elif alignment == 'center':
-				alignedItem = CenterString(item, fieldWidth)
-			else: # if alignment == 'left':
-				alignedItem = LeftString(item, fieldWidth)
-			if Spec.get('truncate', True): alignedItem = alignedItem[:fieldWidth]
-			
-			rowdata[iItem] = alignedItem
-		# for items
-	# for rows
-	return TableContent
-# TabularAlignment()
+	def SetDefaultFormats(self, specs):
+		self.SetRowFormats(TabularAlignmentClass.CatchAllLines(), specs)
+	
+	def AddData(self, data): self.tabledata.extend(data)
+	def AddRow(self, *row_data): self.tabledata.append(row_data)
+	
+	
+	def SelectFormat(self, iLine):
+		rowdata = self.tabledata[iLine]
+		success = None
+		bestFormat = None
+		for lineMatcher, format_ in self.formats.items():
+			match_success = lineMatcher(iLine, self.tabledata)
+			if match_success <= success: continue
+			bestFormat = format_
+			success = match_success
+		# for
+		return bestFormat
+	# SelectFormat()
+	
+	
+	def FormatTable(self):
+		# select the formats for all lines
+		AllFormats \
+		  = [ self.SelectFormat(iRow) for iRow in xrange(len(self.tabledata)) ]
+		
+		# format all the items
+		ItemLengths = MaxItemLengthsClass()
+		TableContent = []
+		for iRow, rowdata in enumerate(self.tabledata):
+			RowFormats = AllFormats[iRow]
+			LineContent = []
+			LastSpec = None
+			for iItem, itemdata in enumerate(rowdata):
+				try:
+					Spec = RowFormats[iItem]
+					LastSpec = Spec
+				except IndexError: Spec = LastSpec
+				
+				Formatter = Spec['format']
+				if isinstance(Formatter, basestring):
+					ItemContent = Formatter % itemdata
+				elif callable(Formatter):
+					ItemContent = Formatter(itemdata)
+				else:
+					raise RuntimeError("Formatter %r (#%d) not supported."
+					% (Formatter, iItem))
+				# if ... else
+				LineContent.append(ItemContent)
+			# for items
+			ItemLengths.add(LineContent)
+			TableContent.append(LineContent)
+		# for rows
+		
+		# pad the objects
+		for iRow, rowdata in enumerate(TableContent):
+			RowFormats = AllFormats[iRow]
+			Spec = AllFormats[iItem]
+			for iItem, item in enumerate(rowdata):
+				try:
+					Spec = RowFormats[iItem]
+					LastSpec = Spec
+				except IndexError: Spec = LastSpec
+				
+				fieldWidth = ItemLengths[iItem]
+				alignment = Spec.get('align', 'left')
+				if alignment == 'right':
+					alignedItem = RightString(item, fieldWidth)
+				elif alignment == 'justified':
+					alignedItem = JustifyString(item, fieldWidth)
+				elif alignment == 'center':
+					alignedItem = CenterString(item, fieldWidth)
+				else: # if alignment == 'left':
+					alignedItem = LeftString(item, fieldWidth)
+				if Spec.get('truncate', True): alignedItem = alignedItem[:fieldWidth]
+				
+				rowdata[iItem] = alignedItem
+			# for items
+		# for rows
+		return TableContent
+	# FormatTable()
+	
+	def ToStrings(self, separator = " "):
+		return [ separator.join(RowContent) for RowContent in self.FormatTable() ]
+	
+	def Print(self, stream = sys.stdout):
+		print "\n".join(self.ToStrings())
+	
+# class TabularAlignmentClass
 
 
-def TableToStrings(TableContent, separator = " "):
-	return [ separator.join(RowContent) for RowContent in TableContent ]
-# TableToStrings()
 
 
 def OPEN(Path, mode = 'r'):
@@ -330,15 +487,17 @@ def OPEN(Path, mode = 'r'):
 if __name__ == "__main__": 
 	
 	Parser = optparse.OptionParser(usage=UsageMsg, version=Version)
+	Parser.set_defaults(PresentMode="ModTable")
 	
-#	Parser.add_option("-G", "--nogroup", dest="DontGroup", action="store_true",
-#	  default=False, help="do not group the pages by node" )
+	Parser.add_option("--eventtable", dest="PresentMode", action="store_const",
+	  const="EventTable", help="do not group the pages by node" )
 	
 	(options, LogFiles) = Parser.parse_args()
 	
-	AllStats = {}
-	ModulesList = []
-	EventStats = TimeModuleStatsClass("=== events ===", bTrackEntries=True)
+	bTrackEntries = options.PresentMode in ( 'EventTable', )
+	AllStats = JobStatsClass( )
+	EventStats \
+	  = TimeModuleStatsClass("=== events ===", bTrackEntries=bTrackEntries)
 	
 	for LogFilePath in LogFiles:
 		LogFile = OPEN(LogFilePath, 'r')
@@ -363,9 +522,8 @@ if __name__ == "__main__":
 				try:
 					ModuleStats = AllStats[TimeData['module']]
 				except KeyError:
-					ModuleStats \
-					  = TimeModuleStatsClass(TimeData['module'], bTrackEntries=True)
-					ModulesList.append(TimeData['module'])
+					ModuleStats = TimeModuleStatsClass \
+					  (TimeData['module'], bTrackEntries=bTrackEntries)
 					AllStats[TimeData['module']] = ModuleStats
 				#
 				
@@ -385,12 +543,22 @@ if __name__ == "__main__":
 		# for line in log file
 	# for log files
 	
-	# present results
-	TableData = [ AllStats[modKey].FormatAsList() for modKey in ModulesList ]
-	TableData.append(EventStats.FormatAsList())
+	OutputTable = TabularAlignmentClass()
 	
-	TableContent = TabularAlignment(TableData)
-	print "\n".join(TableToStrings(TableContent))
+	# present results
+	if options.PresentMode == "ModTable":
+		OutputTable.AddData([ stats.FormatStatsAsList() for stats in AllStats ])
+		OutputTable.AddRow(*EventStats.FormatStatsAsList())
+	elif options.PresentMode == "EventTable":
+		OutputTable.SetRowFormats \
+		  (OutputTable.LineNo(0), [ None, { 'align': 'center' }])
+		OutputTable.AddRow("Module", *range(AllStats.MaxEvents()))
+		OutputTable.AddData([ stats.FormatTimesAsList() for stats in AllStats ])
+		OutputTable.AddRow(*EventStats.FormatTimesAsList())
+	else:
+		raise RuntimeError("Presentation mode %r not known" % options.PresentMode)
+	
+	OutputTable.Print()
 	
 	sys.exit(0)
 # main
