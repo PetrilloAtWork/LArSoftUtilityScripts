@@ -11,4 +11,4 @@
 
 SCRIPTDIR="$(dirname "$0")"
 
-"${SCRIPTDIR}/larcommands.sh" --compact=append --git rev-parse --abbrev-ref HEAD
+"${SCRIPTDIR}/larcommands.sh" --compact=prepend+20 --git describe

@@ -30,6 +30,11 @@ function help() {
 	    add a tag to the list of tags
 	--git
 	    adds "git" as command if it's not the first word of the command already
+	--compact[=MODE]
+	    do not write the git command; out the output of the command according to
+	    MODE:
+	    'prepend' (default): "[%PACKAGENAME%] OUTPUT"
+	    'append': "OUTPUT [%PACKAGENAME%]"
 	--quiet , -q
 	    does not write package and command
 	--fake , --dry-run , -n
@@ -77,9 +82,27 @@ function ReplaceItem() {
 } # ReplaceItem()
 
 
+function PrepareHeader() {
+	local Specs="$1"
+	local Content="$2"
+	
+	case "${Specs:0:1}" in
+		( '-' )
+			printf "%-${Specs:1}s" "$Content"
+			;;
+		( '+' )
+			printf "%${Specs:1}s" "$Content"
+			;;
+		( * )
+			echo "$Content"
+			;;
+	esac
+} # PrepareHeader()
+
 ################################################################################
 ### parameters parser
 ### 
+declare CompactMode='normal'
 declare -i NoMoreOptions=0
 declare -a Command
 for ((iParam = 1 ; iParam <= $# ; ++iParam )); do
@@ -93,10 +116,13 @@ for ((iParam = 1 ; iParam <= $# ; ++iParam )); do
 				FAKE=1
 				;;
 			( "--quiet" | "-q" )
-				Quiet=1
+				CompactMode='quiet'
 				;;
 			( "--git" )
 				AddGit=1
+				;;
+			( "--compact="* )
+				CompactMode="${Param#--compact=}"
 				;;
 			( "--tag="* )
 				Tags=( "${Tags[@]}" "${Param#--tag=}" )
@@ -165,14 +191,35 @@ for Dir in "$SRCDIR"/* ; do
 		PackageCommand[iWord]="$(ReplaceItem "${Command[iWord]}" "${Tags[@]}" )"
 	done
 	
-	isFlagSet Quiet || echo "${PackageName}: ${PackageCommand[@]}"
-	
+	declare Output
 	if ! isFlagSet FAKE ; then
-		"${PackageCommand[@]}"
+		Output="$( "${PackageCommand[@]}" 2>&1 )"
 		res=$?
 	else
 		res=0
 	fi
+	
+	case "$CompactMode" in
+		( 'quiet' )
+			echo -n "$Output"
+			;;
+		( 'prepend'* )
+			Header="$(PrepareHeader "${CompactMode#prepend}" "[${PackageName}]")"
+			echo -n "${Header} ${Output}"
+			[[ $res != 0 ]] && echo -n " (exit code: ${res})"
+			;;
+		( 'append'* )
+			Header="$(PrepareHeader "${CompactMode#append}" "[${PackageName}]")"
+			echo -n "${Output} ${Header}"
+			[[ $res != 0 ]] && echo -n " (exit code: ${res})"
+			;;
+		( * )
+			echo -n "${PackageName}: ${PackageCommand[@]}"
+			[[ $res != 0 ]] && echo -n " [exit code: ${res}]"
+			echo
+			echo -n "$Output"
+	esac
+	echo
 	
 	isFlagSet StopOnError && [[ $res != 0 ]] && exit "$res"
 	
