@@ -805,18 +805,20 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	fi
 done
 
-declare -i ExitCode
+declare -i ExitCode NeedHelp=1
 if isFlagSet OnlyPrintEnvironment ; then
+	NeedHelp=0
 	PrintPackageVersions "${StandardPackages[@]}"
 	{ [[ -z "$ExitCode" ]] || [[ "$ExitCode" == 0 ]] ; } && ExitCode="$?"
 fi
 
 if isFlagSet DoVersion ; then
+	NeedHelp=0
 	echo "${SCRIPTNAME} version ${SCRIPTVERSION:-"unknown"}"
 	: ${ExitCode:=0}
 fi
 
-if isFlagSet DoHelp || [[ -z "$ConfigFile" ]] ; then
+if isFlagSet DoHelp || ( isFlagSet NeedHelp && [[ -z "$ConfigFile" ]] ); then
 	help
 	# set the exit code (0 for help option, 1 for missing parameters)
 	isFlagSet DoHelp

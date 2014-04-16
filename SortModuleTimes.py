@@ -441,7 +441,7 @@ class TabularAlignmentClass:
 		# pad the objects
 		for iRow, rowdata in enumerate(TableContent):
 			RowFormats = AllFormats[iRow]
-			Spec = AllFormats[iItem]
+			Spec = AllFormats[iRow]
 			for iItem, item in enumerate(rowdata):
 				try:
 					Spec = RowFormats[iItem]
@@ -490,7 +490,9 @@ if __name__ == "__main__":
 	Parser.set_defaults(PresentMode="ModTable")
 	
 	Parser.add_option("--eventtable", dest="PresentMode", action="store_const",
-	  const="EventTable", help="do not group the pages by node" )
+	  const="EventTable", help="do not group the pages by node")
+	Parser.add_option("--maxevents", dest="MaxEvents", type=int, default=-1,
+	  help="limit the number of parsed events to this (negative: no limit)")
 	
 	(options, LogFiles) = Parser.parse_args()
 	
@@ -499,49 +501,62 @@ if __name__ == "__main__":
 	EventStats \
 	  = TimeModuleStatsClass("=== events ===", bTrackEntries=bTrackEntries)
 	
-	for LogFilePath in LogFiles:
-		LogFile = OPEN(LogFilePath, 'r')
-		
-		LastLine = None
-		for iLine, line in enumerate(LogFile):
+	class NoMoreInput: pass
+	
+	try:
+		if options.MaxEvents == 0: raise NoMoreInput # wow, that was quick!
+		for LogFilePath in LogFiles:
+			LogFile = OPEN(LogFilePath, 'r')
 			
-			line = line.strip()
-			if line == LastLine: continue # duplicate line
-			LastLine = line
-			
-			if line.startswith("TimeModule> "):
+			LastLine = None
+			for iLine, line in enumerate(LogFile):
 				
-				try:
-					TimeData = ParseTimeModuleLine(line)
-				except FormatError, e:
-					print >>sys.stderr, \
-					  "Format error on '%s'@%d:" % (LogFilePath, iLine)
-					raise
-				# try ... except
+				line = line.strip()
+				if line == LastLine: continue # duplicate line
+				LastLine = line
 				
-				try:
-					ModuleStats = AllStats[TimeData['module']]
-				except KeyError:
-					ModuleStats = TimeModuleStatsClass \
-					  (TimeData['module'], bTrackEntries=bTrackEntries)
-					AllStats[TimeData['module']] = ModuleStats
-				#
+				if line.startswith("TimeModule> "):
+					
+					try:
+						TimeData = ParseTimeModuleLine(line)
+					except FormatError, e:
+						print >>sys.stderr, \
+						  "Format error on '%s'@%d:" % (LogFilePath, iLine)
+						raise
+					# try ... except
+					
+					try:
+						ModuleStats = AllStats[TimeData['module']]
+					except KeyError:
+						ModuleStats = TimeModuleStatsClass \
+						  (TimeData['module'], bTrackEntries=bTrackEntries)
+						AllStats[TimeData['module']] = ModuleStats
+					#
+					
+					ModuleStats.add(TimeData)
+				elif line.startswith("TimeEvent> "):
+					try:
+						TimeData = ParseTimeEventLine(line)
+					except FormatError, e:
+						print >>sys.stderr, \
+						  "Format error on '%s'@%d:" % (LogFilePath, iLine)
+						raise
+					# try ... except
+					
+					EventStats.add(TimeData)
+					if (options.MaxEvents >= 0) \
+					  and (EventStats.n() >= options.MaxEvents):
+						raise NoMoreInput
+				else: continue
 				
-				ModuleStats.add(TimeData)
-			elif line.startswith("TimeEvent> "):
-				try:
-					TimeData = ParseTimeEventLine(line)
-				except FormatError, e:
-					print >>sys.stderr, \
-					  "Format error on '%s'@%d:" % (LogFilePath, iLine)
-					raise
-				# try ... except
-				
-				EventStats.add(TimeData)
-			else: continue
-			
-		# for line in log file
-	# for log files
+			# for line in log file
+		# for log files
+	except NoMoreInput: pass
+	
+	if AllStats.MaxEvents() == 0:
+		print "No time statistics found."
+		sys.exit(1)
+	# if
 	
 	OutputTable = TabularAlignmentClass()
 	
