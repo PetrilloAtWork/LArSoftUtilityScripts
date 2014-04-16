@@ -30,6 +30,8 @@ function help() {
 	    add a tag to the list of tags
 	--git
 	    adds "git" as command if it's not the first word of the command already
+	--quiet , -q
+	    does not write package and command
 	--fake , --dry-run , -n
 	    just prints the command that would be executed
 	--stop-on-error , -S
@@ -89,6 +91,9 @@ for ((iParam = 1 ; iParam <= $# ; ++iParam )); do
 		case "$Param" in
 			( "--fake" | "--dry-run" | "-n" )
 				FAKE=1
+				;;
+			( "--quiet" | "-q" )
+				Quiet=1
 				;;
 			( "--git" )
 				AddGit=1
@@ -160,7 +165,7 @@ for Dir in "$SRCDIR"/* ; do
 		PackageCommand[iWord]="$(ReplaceItem "${Command[iWord]}" "${Tags[@]}" )"
 	done
 	
-	echo "${PackageName}: ${PackageCommand[@]}"
+	isFlagSet Quiet || echo "${PackageName}: ${PackageCommand[@]}"
 	
 	if ! isFlagSet FAKE ; then
 		"${PackageCommand[@]}"
