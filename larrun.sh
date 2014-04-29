@@ -29,10 +29,12 @@
 #     support including FCL directives on the fly
 # 1.10 (petrillo@fnal.gov)
 #     change the description of the GIT packages (from the commit to describe)
+# 1.11 (petrillo@fnal.gov)
+#     support per-event reseeding
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.10"
+SCRIPTVERSION="1.11"
 
 DATETAG="$(datetag)"
 
@@ -110,8 +112,12 @@ function help() {
 	--nowrap
 	    do not use a FCL wrapper; some of the following features will not be
 	    available in that case
-	--seed=FILENAME[@ALIAS]
-	    use FILENAME as the file to restore the random seed, optionally changing
+	--seedfromevents[=RandomNumberSaverInstance]
+	    restores random seeds, event-based, from the product created by a
+	    RandomNumberSaver module instance in the input file; the name of the
+	    instance can be specified as parameter, and it defaults to "rns"
+	--seedfromfile=FILENAME[@ALIAS]
+	    use FILENAME as the file to restore the random seeds, optionally changing
 	    its name/location into ALIAS; currently the FCL file must have the ALIAS
 	    path already in, for this to work
 	--precfg=FILE
@@ -192,7 +198,7 @@ function FATAL() {
 } # FATAL()
 function LASTFATAL() {
 	local Code="$?"
-	[[ "$Code" != 0 ]] && FATAL "$Code""$@"
+	[[ "$Code" != 0 ]] && FATAL "$Code" "$@"
 } # LASTFATAL()
 
 function isDebugging() {
@@ -632,6 +638,65 @@ function ImportFCLfileInWorkArea() {
 } # ImportFCLfileInWorkArea()
 
 
+function ConfigurationReseeder() {
+	#
+	# The purpose of this function is to add a sequence of statements at the end
+	# of a configuration file, which allows to rerun a job using the same
+	# random sequences as the original one.
+	#
+	#
+	local ConfigurationFile="$1"
+	local OriginalOutputFile="$2"
+	local RNSinstanceName="${3:-rns}"
+	local NewProcessName="$4"
+	
+	local res=0
+	
+	#
+	# determine the process name of the original job;
+	# it should be in the configuration
+	#
+	
+	local OriginalProcessName
+	# look for lines starting with "process_name", use only the last one,
+	# take everything after ':', remove spaces and quotes
+	OriginalProcessName="$(grep -e '^[[:blank:]]*process_name[[:blank:]]*:[[:blank:]]*' "$ConfigurationFile" | tail -n 1 | sed -e 's/.*://' | tr -d "\"'[[:blank:]]")"
+	res=$?
+	[[ $res != 0 ]] && return $res
+	
+	DBG "Detected process name: '${OriginalProcessName}'"
+	
+	#
+	# Select a new process name
+	#
+	: ${NewProcessName:="${OriginalProcessName}Rerun"}
+	DBG "New process name: '${NewProcessName}'"
+	
+	#
+	# detect the random state branch name
+	#
+	local StateProductLabel="art::RNGsnapshots"
+	
+	#
+	# print the additional lines needed
+	#
+	cat <<-EOI
+	
+	###
+	### reseeding from the input file itself
+	###
+	# rename the process from '${OriginalProcessName}' to '${NewProcessName}'
+	process_name: "${NewProcessName}"
+	# drop all the existing output branches, but keep the random state one
+	source.inputCommands: [ "keep *", "drop *_*_*_${OriginalProcessName}", "keep *_${RNSinstanceName}__${OriginalProcessName}" ]
+	# use the existing states for seeding
+	services.RandomNumberGenerator.restoreStateLabel: "${RNSinstanceName}"
+	EOI
+	
+	return 0
+} # ConfigurationReseeder()
+
+
 function InterruptHandler() {
 	echo
 	STDERR "Interruption requested."
@@ -693,7 +758,9 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--precfg='* )               PrependConfigFiles=( "${PrependConfigFiles[@]}" "${Param#--*=}" ) ;;
 			( '--include='* )              AppendConfigFiles=( "${AppendConfigFiles[@]}" "${Param#--*=}" ) ;;
 			( '--inject='* )               AppendConfigLines=( "${AppendConfigLines[@]}" "${Param#--*=}" ) ;;
-			( '--seed='* )
+			( '--seedfromevents' )         SeedFromEvents="rns" ;;
+			( '--seedfromevents='* )       SeedFromEvents="${Param#--*=}" ;;
+			( '--seedfromfile='* )
 				SavedSeed="${Param#--*=}"
 				if [[ "${SavedSeed/@}" != "$SavedSeed" ]]; then
 					RestoreSeed="${SavedSeed#*@}"
@@ -1015,6 +1082,7 @@ fi
 
 
 if [[ -r "$RestoreSeed" ]]; then
+	[[ -z "$SeedFromEvents" ]] || FATAL 1 "Seeds can be restored either from file or from events, not both."
 	if isFlagSet UseConfigWrapper ; then
 		cat <<-EOI >> "$WrappedConfigPath"
 		
@@ -1024,6 +1092,9 @@ if [[ -r "$RestoreSeed" ]]; then
 	else
 		WARN "The directive to restore random seeds from '${RestoreSeed}' must be already in the configuration file."
 	fi
+elif [[ -n "$SeedFromEvents" ]]; then
+	ConfigurationReseeder "$ConfigPath" "${SourceFiles[0]}" "$SeedFromEvents" "" >> "$WrappedConfigPath"
+	LASTFATAL "Couldn't set up the reseeding of the random generators by the event!"
 fi
 
 #

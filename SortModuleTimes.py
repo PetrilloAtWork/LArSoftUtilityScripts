@@ -10,6 +10,8 @@
 #   support for compressed input files; added command line interface
 # 1.2 (petrillo@fnal.gov)
 #   new mode to expose all the events
+# 1.3 (petrillo@fnal.gov)
+#   permissive option to ignore errors in the input
 #
 
 import sys, os
@@ -20,7 +22,7 @@ except ImportError: pass
 
 import optparse
 
-Version = "%prog 1.2"
+Version = "%prog 1.3"
 UsageMsg = """Prints statistics of the module timings based on the information from
 the Timing service.
 
@@ -107,9 +109,13 @@ class TimeModuleStatsClass(Stats):
 			self.entries.append(data)
 			self.entryKeys.add(eventKey)
 		# if
-		Stats.add(self, data['time'])
+		if data['time'] is not None: Stats.add(self, data['time'])
 		return True
 	# add()
+	
+	def nEntries(self): return len(self.entries)
+	def nEvents(self): return self.n()
+	def hasEmptyData(self): return self.nEntries() > self.nEvents()
 	
 	def FormatStatsAsList(self, format_ = None):
 		if isinstance(self.key, basestring): name = str(self.key)
@@ -130,12 +136,16 @@ class TimeModuleStatsClass(Stats):
 		if isinstance(self.key, basestring): name = str(self.key)
 		else: name = "%s[%s]" % (self.key[1], self.key[0])
 		
-		n = min(self.n(), format_.get('max_events', self.n()))
+		n = min(self.nEntries(), format_.get('max_events', self.nEntries()))
 		format_str = format_.get('format', '%g')
 		if not self.entries: return [ name, ] + [ "n/a", ] * n
 		
-		return [ name, ] \
-		  + [ format_str % entry['time'] for entry in self.entries[:n] ]
+		output = [ name, ]
+		for entry in self.entries[:n]:
+			if entry is None: output.append("n/a")
+			else:             output.append(format_str % entry['time'])
+		# for
+		return output
 	# FormatTimesAsList()
 	
 # class TimeModuleStatsClass
@@ -476,13 +486,67 @@ class TabularAlignmentClass:
 
 
 
-
 def OPEN(Path, mode = 'r'):
 	if Path.endswith('.bz2'): return bz2.BZ2File(Path, mode)
 	if Path.endswith('.gz'): return gzip.GzipFile(Path, mode)
 	return open(Path, mode)
 # OPEN()
 
+
+def ParseInputFile(InputFilePath, AllStats, options):
+	
+	LogFile = OPEN(InputFilePath, 'r')
+	
+	nErrors = 0
+	LastLine = None
+	for iLine, line in enumerate(LogFile):
+		
+		line = line.strip()
+		if line == LastLine: continue # duplicate line
+		LastLine = line
+		
+		if line.startswith("TimeModule> "):
+			
+			try:
+				TimeData = ParseTimeModuleLine(line)
+			except FormatError, e:
+				nErrors += 1
+				print >>sys.stderr, \
+				  "Format error on '%s'@%d" % (InputFilePath, iLine)
+				if not options.Permissive: raise
+				else:                      continue
+			# try ... except
+			
+			try:
+				ModuleStats = AllStats[TimeData['module']]
+			except KeyError:
+				ModuleStats = TimeModuleStatsClass \
+				  (TimeData['module'], bTrackEntries=bTrackEntries)
+				AllStats[TimeData['module']] = ModuleStats
+			#
+			
+			ModuleStats.add(TimeData)
+		elif line.startswith("TimeEvent> "):
+			try:
+				TimeData = ParseTimeEventLine(line)
+			except FormatError, e:
+				nErrors += 1
+				print >>sys.stderr, \
+				  "Format error on '%s'@%d" % (InputFilePath, iLine)
+				if not options.Permissive: raise
+				else:                      continue
+			# try ... except
+			
+			EventStats.add(TimeData)
+			if (options.MaxEvents >= 0) \
+			  and (EventStats.n() >= options.MaxEvents):
+				raise NoMoreInput
+		else: continue
+		
+	# for line in log file
+	
+	return nErrors
+# ParseInputFile()
 
 if __name__ == "__main__": 
 	
@@ -493,6 +557,8 @@ if __name__ == "__main__":
 	  const="EventTable", help="do not group the pages by node")
 	Parser.add_option("--maxevents", dest="MaxEvents", type=int, default=-1,
 	  help="limit the number of parsed events to this (negative: no limit)")
+	Parser.add_option("--permissive", dest="Permissive", action="store_true",
+	  help="treats input errors as non-fatal [%default]")
 	
 	(options, LogFiles) = Parser.parse_args()
 	
@@ -503,55 +569,16 @@ if __name__ == "__main__":
 	
 	class NoMoreInput: pass
 	
+	nErrors = 0
 	try:
 		if options.MaxEvents == 0: raise NoMoreInput # wow, that was quick!
 		for LogFilePath in LogFiles:
-			LogFile = OPEN(LogFilePath, 'r')
-			
-			LastLine = None
-			for iLine, line in enumerate(LogFile):
-				
-				line = line.strip()
-				if line == LastLine: continue # duplicate line
-				LastLine = line
-				
-				if line.startswith("TimeModule> "):
-					
-					try:
-						TimeData = ParseTimeModuleLine(line)
-					except FormatError, e:
-						print >>sys.stderr, \
-						  "Format error on '%s'@%d:" % (LogFilePath, iLine)
-						raise
-					# try ... except
-					
-					try:
-						ModuleStats = AllStats[TimeData['module']]
-					except KeyError:
-						ModuleStats = TimeModuleStatsClass \
-						  (TimeData['module'], bTrackEntries=bTrackEntries)
-						AllStats[TimeData['module']] = ModuleStats
-					#
-					
-					ModuleStats.add(TimeData)
-				elif line.startswith("TimeEvent> "):
-					try:
-						TimeData = ParseTimeEventLine(line)
-					except FormatError, e:
-						print >>sys.stderr, \
-						  "Format error on '%s'@%d:" % (LogFilePath, iLine)
-						raise
-					# try ... except
-					
-					EventStats.add(TimeData)
-					if (options.MaxEvents >= 0) \
-					  and (EventStats.n() >= options.MaxEvents):
-						raise NoMoreInput
-				else: continue
-				
-			# for line in log file
-		# for log files
+			nErrors += ParseInputFile(LogFilePath, AllStats, options)
+		
 	except NoMoreInput: pass
+	
+	# give a bit of separation between error messages and actual output
+	if nErrors > 0: print >>sys.stderr
 	
 	if AllStats.MaxEvents() == 0:
 		print "No time statistics found."
@@ -575,5 +602,7 @@ if __name__ == "__main__":
 	
 	OutputTable.Print()
 	
-	sys.exit(0)
+	if nErrors > 0:
+		print >>sys.stderr, "%d errors were found in the input files." % nErrors
+	sys.exit(nErrors)
 # main

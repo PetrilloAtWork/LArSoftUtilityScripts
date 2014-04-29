@@ -5,6 +5,8 @@
 # Usage: see FindModule.sh --help (help() function below)
 # 
 # Changes:
+# 20140421, petrillo@fnal.gov (version 1.2)
+#   bug fix to regex search; added '--debug' option
 # 20140218, petrillo@fnal.gov (version 1.1)
 #   adding version number and grepping abilities
 # 201402??, petrillo@fnal.gov (version 1.0)
@@ -34,6 +36,8 @@ function help() {
 	--libraries , --lib , -L
 	    searches in the current library paths (default if MRB_SOURCE is not
 	    defined)
+	--debug
+	    print additional debug information
 	--version , -V
 	    print the version number and exit
 	--help , -h , -?
@@ -61,6 +65,9 @@ function LASTFATAL() {
 	[[ "$Code" != 0 ]] && FATAL "$Code""$@"
 } # LASTFATAL()
 
+function isDebugging() { isFlagSet DEBUG ; }
+function DBG() { isDebugging && STDERR "DBG| $*" ; }
+
 
 ################################################################################
 
@@ -73,8 +80,9 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
 	if ! isFlagSet NoMoreOptions && [[ "${Param:0:1}" == '-' ]]; then
 		case "$Param" in
-			( '--help' | '-h' | '-?' ) DoHelp=1  ;;
-			( '--version' | '-V' ) DoVersion=1  ;;
+			( '--help' | '-h' | '-?' ) DoHelp=1 ;;
+			( '--version' | '-V' ) DoVersion=1 ;;
+			( '--debug' ) DEBUG=1 ;;
 			
 			( '--sources' | '--src' | '-S' ) FromSources=1 ;;
 			( '--libraries' | '--lib' | '-L' ) FromLibraries=1 ;;
@@ -146,7 +154,9 @@ if isFlagSet FromSources ; then
 	done
 	
 	if [[ -d "$MRB_SOURCE" ]]; then
-		find "$MRB_SOURCE" ${REGEX:+-regextype "$REGEX"} "${SourceFindCommands[@]}"
+		declare -a Command=( find "$MRB_SOURCE" ${REGEX:+-regextype "$REGEX"} "${SourceFindCommands[@]}" )
+		DBG "${Command[@]}"
+		"${Command[@]}"
 	elif [[ -z "$MRB_SOURCE" ]]; then
 		ERROR "Source directory (MRB_SOURCE) not defined."
 	else
@@ -158,7 +168,7 @@ fi
 if isFlagSet FromLibraries ; then
 	declare -a LibraryFindCommands
 	for Pattern in "${Patterns[@]:-"$DefaultPattern"}" ; do
-		LibraryFindCommands=( "${LibraryFindCommands[@]}" "-${FindCommand}" "lib${Pattern}_module.so" )
+		LibraryFindCommands=( "${LibraryFindCommands[@]}" "-${FindCommand}" ".*/lib${Pattern}_module.so" )
 	done
 	
 	if [[ -n "$LD_LIBRARY_PATH" ]]; then
@@ -166,11 +176,13 @@ if isFlagSet FromLibraries ; then
 		declare OldIFS="$IFS"
 		IFS=":"
 		AllLibPaths=( ${LD_LIBRARY_PATH} )
-		IFS="OlfIFS"
+		IFS="$OldIFS"
 		for LibPath in "${AllLibPaths[@]}" ; do
 			[[ -d "$LibPath" ]] && LibPaths=( "${LibPaths[@]}" "$LibPath" )
 		done
-		find "${LibPaths[@]}" ${REGEX:+-regextype "$REGEX"} "${LibraryFindCommands[@]}"
+		declare -a Command=( find "${LibPaths[@]}" ${REGEX:+-regextype "$REGEX"} "${LibraryFindCommands[@]}" )
+		DBG "${Command[@]}"
+		"${Command[@]}"
 		[[ $? == 0 ]] && Found=1
 	else
 		ERROR "No library path configured (LD_LIBRARY_PATH)."
