@@ -11,10 +11,10 @@ declare local_scriptdir="$(dirname "$(readlink -f "${BASH_SOURCE:-$0}")")"
 
 declare -a local_setup_autodetection
 if type autodetectLArSoft.sh >& /dev/null ; then
-	local_setup_autodetection=( $(autodetectLArSoft.sh "" "debug:e4" "LArSoft") )
+	local_setup_autodetection=( $(autodetectLArSoft.sh "" "debug:e5" "LArSoft") )
 else
 	echo "Autodetection skipped." >&2
-	local_setup_autodetection=( "" "debug:e4" "LArSoft" )
+	local_setup_autodetection=( "" "debug:e5" "LArSoft" )
 fi
 
 declare local_setup_version="${1:-${local_setup_autodetection[0]}}"

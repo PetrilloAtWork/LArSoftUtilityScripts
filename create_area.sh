@@ -5,7 +5,7 @@
 #
 
 declare local_create_area_DefaultVersion="${LARCORE_VERSION:-"nightly"}"
-declare local_create_area_DefaultQual="${MRB_QUAL:-"debug:e4"}"
+declare local_create_area_DefaultQual="${MRB_QUAL:-"debug:e5"}"
 
 function SortUPSqualifiers() {
 	# Usage:  SortUPSqualifiers  Qualifiers [Separator]

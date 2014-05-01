@@ -265,15 +265,8 @@ case "$local_setup_mode" in
 		### build environment setup
 		###
 		echo " * build environment set up"
-		declare local_setup_build_script="${MRB_SOURCE:-"srcs"}/setEnv"
-		if [[ -r "$local_setup_build_script" ]]; then
-			let ++local_setup_nOutput
-			source mrb setEnv >& >(sed -e "s/^/    [${local_setup_nOutput}> /")
-		else
-			echo "ERROR: no ${local_setup_build_script} found. You won't be able to compile code here." >&2
-			return 1
-		fi
-		unset local_setup_build_script
+		let ++local_setup_nOutput
+		source mrb setEnv >& >(sed -e "s/^/    [${local_setup_nOutput}> /")
 		;; # build
 	
 	( * )

@@ -922,6 +922,7 @@ done
 declare ConfigName="$(basename "${ConfigFile%.fcl}")"
 : ${JobBaseName:="$ConfigName"}
 
+DBGN 2 "FHICL_FILE_PATH=${FHICL_FILE_PATH}"
 declare UserConfigPath="$ConfigFile"
 declare FullConfigPath="$(FindFCLfile "$UserConfigPath")"
 [[ -z "$FullConfigPath" ]] && WARN "Could not find the configuration file '${UserConfigPath}'"

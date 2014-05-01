@@ -53,10 +53,10 @@ declare local_setup_autodetection_script="$(which 'autodetectLArSoft.sh' >& /dev
 [[ -x "$local_setup_autodetection_script" ]] || local_setup_autodetection_script="${local_scriptdir}/autodetectLArSoft.sh"
 [[ -x "$local_setup_autodetection_script" ]] || local_setup_autodetection_script="$(dirname "$local_scriptdir")/autodetectLArSoft.sh"
 if [[ -x "$local_setup_autodetection_script" ]] ; then
-	local_setup_autodetection=( $("$local_setup_autodetection_script" -v -q -e -L -p "nightly" "debug:e4" "LArSoft") )
+	local_setup_autodetection=( $("$local_setup_autodetection_script" -v -q -e -L -p "nightly" "debug:e5" "LArSoft") )
 else
 	echo "Autodetection skipped." >&2
-	local_setup_autodetection=( "" "debug:e4" "LArSoft" 'larsoft' "" )
+	local_setup_autodetection=( "" "debug:e5" "LArSoft" 'larsoft' "" )
 fi
 unset local_setup_autodetection_script
 
