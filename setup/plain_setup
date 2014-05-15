@@ -266,7 +266,14 @@ case "$local_setup_mode" in
 		###
 		echo " * build environment set up"
 		let ++local_setup_nOutput
-		source mrb setEnv >& >(sed -e "s/^/    [${local_setup_nOutput}> /")
+		declare -a local_setup_MRBsetEnv
+		if [[ "$(cut -d' ' -f2 <<< "$SETUP_MRB" | cut -b1-2)" == "v0" ]]; then
+			local_setup_MRBsetEnv=( source mrb setEnv )
+		else
+			local_setup_MRBsetEnv=( mrbsetenv )
+		fi
+		"${local_setup_MRBsetEnv[@]}" >& >(sed -e "s/^/    [${local_setup_nOutput}> /")
+		unset local_setup_MRBsetEnv
 		;; # build
 	
 	( * )

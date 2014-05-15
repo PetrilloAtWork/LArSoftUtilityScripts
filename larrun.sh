@@ -4,7 +4,7 @@
 #
 # Use with --help for usage instructions.
 #
-# Vesion history:
+# Version history:
 # 1.0 (petrillo@fnal.gov)
 #     first published version
 # 1.1 (petrillo@fnal.gov)
@@ -1167,6 +1167,7 @@ $(PrintPackageVersions "${StandardPackages[@]}")
 ================================================================================
 EOM
 
+export FHICL_FILE_PATH # be sure it's clear...
 if isFlagSet DUMPCONFIG ; then
 	export ART_DEBUG_CONFIG="${JobName}.cfg"
 	echo "Configuration dump into: '${ART_DEBUG_CONFIG}'" >> "$AbsoluteLogPath"
