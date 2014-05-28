@@ -137,7 +137,7 @@ else
 		return 1
 	fi
 	
-	declare local_create_area_test_script="ExecTest-$$.sh"
+	declare local_create_area_test_script="./ExecTest-$$.sh"
 	cat <<-EOS > "$local_create_area_test_script"
 	#!/bin/bash
 	echo "success!"

@@ -214,13 +214,13 @@ case "$local_setup_mode" in
 		declare -a local_setup_codenames=( "$local_setup_package" )
 		case "$local_setup_experiment" in
 			( 'MicroBooNE' )
-				local_setup_codenames=( "${local_setup_codenames[@]}" 'ubfcl@@' )
+				local_setup_codenames=( "${local_setup_codenames[@]}" )
 				;;
 			( 'LBNE' )
 				local_setup_codenames=( "${local_setup_codenames[@]}" )
 				;;
 			( 'AllExperiments' )
-				local_setup_codenames=( "${local_setup_codenames[@]}" 'lbnecode' 'uboonecode' 'ubfcl@@' )
+				local_setup_codenames=( "${local_setup_codenames[@]}" 'lbnecode' 'uboonecode' )
 				;;
 			( * )
 				local_setup_codenames=( "${local_setup_codenames[@]}" )
