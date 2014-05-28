@@ -12,7 +12,7 @@ fi
 
 ( # subshell, protect from sourcing
 
-SCRIPTNAME="$(basename "$0")"
+SCRIPTNAME="$(basename -- "$0")"
 SCRIPTVERSION="1.0"
 
 function help() {
