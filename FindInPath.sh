@@ -38,6 +38,9 @@ function help() {
 	--grep=PATTERN , -e PATTERN
 	    prints only the files containing the specified pattern
 	    (it's a grep '-G' pattern, see \`man 1 grep\`)
+	--simplegrep=PATTERN , -F PATTERN
+	    prints only the files containing the specified pattern
+	    (it's a grep '-F' pattern, see \`man 1 grep\`)
 	--bin , -B
 	--lib , -L
 	--fcl , --fhicl , -F
@@ -120,12 +123,14 @@ function CleanKeys() { sed -e 's/^[^ ]* \+[^ ]* \+//' ; }
 
 function GrepText() {
 	local Key File Output
+	local GrepMode="${1:-'G'}"
+	shift
 	while read Key File Output ; do
 		local Matches=1
 		if [[ $# -gt 0 ]]; then
 			Matches=0
 			for Pattern in "$@" ; do
-				grep -q -G -e "$Pattern" -- "$File" && Matches=1 && break
+				grep -q -${GrepMode} -e "$Pattern" -- "$File" && Matches=1 && break
 			done
 		fi
 		isFlagSet Matches && echo "${Key} ${File} ${Output}"
@@ -169,7 +174,7 @@ function SplitPaths() {
 ################################################################################
 
 declare -i NoMoreOptions=0
-declare -a SimpleFilters GREPPATTERNS Patterns GenFilters VarListNames
+declare -a SimpleFilters GREPPATTERNS GrepMode Patterns GenFilters VarListNames
 declare -i nSimpleFilters=0
 for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
@@ -186,8 +191,10 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--format='* )    FORMAT="${Param#--*=}" ;;
 			
 			### selection options
-			( '--grep='* )          GREPPATTERNS=( "${GREPPATTERNS[@]}" "${Param#--*=}" ) ;;
-			( '-e' ) let ++iParam ; GREPPATTERNS=( "${GREPPATTERNS[@]}" "${!iParam}" ) ;;
+			( '--grep='* )          GREPPATTERNS=( "${GREPPATTERNS[@]}" "${Param#--*=}" ) ; GrepMode='G' ;;
+			( '-e' | '-G' ) let ++iParam ; GREPPATTERNS=( "${GREPPATTERNS[@]}" "${!iParam}" ) ; GrepMode='G'  ;;
+			( '--simplegrep='* )    GREPPATTERNS=( "${GREPPATTERNS[@]}" "${Param#--*=}" ) ; GrepMode='F' ;;
+			( '-F' ) let ++iParam ; GREPPATTERNS=( "${GREPPATTERNS[@]}" "${!iParam}" ) ; GrepMode='F'  ;;
 			( '--simple='* )        SimpleFilters=( "${SimpleFilters[@]}" "${Param#--*=}" ) ;;
 			( '-s' ) let ++iParam ; SimpleFilters=( "${SimpleFilters[@]}" "${!iParam}" ) ;;
 			( '--regex='* )         Patterns=( "${Patterns[@]}" "${Param#--*=}" ) ;;
@@ -268,4 +275,4 @@ fi
 #   same name from different directories
 # - filter them on sort key (file name) by user's request
 # - remove the sort key (file name) from the output
-SplitPaths "${VarListNames[@]}" | xargs -I SEARCHPATH find SEARCHPATH -maxdepth 1 "${AllFindNames[@]}" -printf "%f %p ${FORMAT}\n" 2> /dev/null | sort -s -k1,1 -u | Filter "${Patterns[@]}" | GrepText "${GREPPATTERNS[@]}" | CleanKeys
+SplitPaths "${VarListNames[@]}" | xargs -I SEARCHPATH find SEARCHPATH -maxdepth 1 "${AllFindNames[@]}" -printf "%f %p ${FORMAT}\n" 2> /dev/null | sort -s -k1,1 -u | Filter "${Patterns[@]}" | GrepText "$GrepMode" "${GREPPATTERNS[@]}" | CleanKeys
