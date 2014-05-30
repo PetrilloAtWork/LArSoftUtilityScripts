@@ -4,5 +4,6 @@
 #
 
 declare local_scriptdir="$(dirname "$(readlink -f "${BASH_SOURCE:-$0}")")"
-source "${local_scriptdir}/setup" 'develop' "$@"
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || SOURCECMD="source"
+$SOURCECMD "${local_scriptdir}/setup" 'develop' "$@"
 unset local_scriptdir
