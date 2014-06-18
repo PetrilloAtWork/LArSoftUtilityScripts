@@ -12,6 +12,8 @@
 #   new mode to expose all the events
 # 1.3 (petrillo@fnal.gov)
 #   permissive option to ignore errors in the input
+# 1.4 (20140618, petrillo@fnal.gov)
+#   updating from optparse to argparse
 #
 
 import sys, os
@@ -20,14 +22,10 @@ import gzip
 try: import bz2
 except ImportError: pass
 
-import optparse
+import argparse
 
-Version = "%prog 1.3"
-UsageMsg = """Prints statistics of the module timings based on the information from
-the Timing service.
-
-%prog  [options] LogFile [LogFile ...]
-"""
+Version = "%(prog)s 1.3"
+__doc__ = "Prints statistics of the module timings based on the information from the Timing service."
 
 #
 # statistics collection
@@ -493,7 +491,7 @@ def OPEN(Path, mode = 'r'):
 # OPEN()
 
 
-def ParseInputFile(InputFilePath, AllStats, options):
+def ParseInputFile(InputFilePath, AllStats, EventStats, options):
 	
 	LogFile = OPEN(InputFilePath, 'r')
 	
@@ -550,17 +548,23 @@ def ParseInputFile(InputFilePath, AllStats, options):
 
 if __name__ == "__main__": 
 	
-	Parser = optparse.OptionParser(usage=UsageMsg, version=Version)
+	Parser = argparse.ArgumentParser(description=__doc__)
 	Parser.set_defaults(PresentMode="ModTable")
 	
-	Parser.add_option("--eventtable", dest="PresentMode", action="store_const",
-	  const="EventTable", help="do not group the pages by node")
-	Parser.add_option("--maxevents", dest="MaxEvents", type=int, default=-1,
-	  help="limit the number of parsed events to this (negative: no limit)")
-	Parser.add_option("--permissive", dest="Permissive", action="store_true",
-	  help="treats input errors as non-fatal [%default]")
+	# positional arguments
+	Parser.add_argument("LogFiles", metavar="LogFile", nargs="+",
+	  help="log file to be parsed")
 	
-	(options, LogFiles) = Parser.parse_args()
+	# options
+	Parser.add_argument("--eventtable", dest="PresentMode", action="store_const",
+	  const="EventTable", help="do not group the pages by node")
+	Parser.add_argument("--maxevents", dest="MaxEvents", type=int, default=-1,
+	  help="limit the number of parsed events to this (negative: no limit)")
+	Parser.add_argument("--permissive", dest="Permissive", action="store_true",
+	  help="treats input errors as non-fatal [%(default)s]")
+	Parser.add_argument('--version', action='version', version=Version)
+	
+	options = Parser.parse_args()
 	
 	bTrackEntries = options.PresentMode in ( 'EventTable', )
 	AllStats = JobStatsClass( )
@@ -572,8 +576,8 @@ if __name__ == "__main__":
 	nErrors = 0
 	try:
 		if options.MaxEvents == 0: raise NoMoreInput # wow, that was quick!
-		for LogFilePath in LogFiles:
-			nErrors += ParseInputFile(LogFilePath, AllStats, options)
+		for LogFilePath in options.LogFiles:
+			nErrors += ParseInputFile(LogFilePath, AllStats, EventStats, options)
 		
 	except NoMoreInput: pass
 	
