@@ -31,10 +31,12 @@
 #     change the description of the GIT packages (from the commit to describe)
 # 1.11 (petrillo@fnal.gov)
 #     support per-event reseeding
+# 1.12 (petrillo@fnal.gov)
+#     support Allinea "map" profiler
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.11"
+SCRIPTVERSION="1.12"
 
 DATETAG="$(datetag)"
 
@@ -159,6 +161,10 @@ function help() {
 	--gpt , --gperftools
 	    equivalent to --profile=GPerfTools: uses the GPerfTools profiler;
 	    options can be added to the environment via "--env:" options
+	--allinea[=ProfileOptionString], -A
+	    equivalent to --prepend=map or --profile=map: uses the Allines profiler;
+	    the optional ProfileOptionString string will be added in a way equivalent
+	    to --prependopts=ProfileOptionString
 	--valgrind[=ProfileOptionString], -V
 	    equivalent to --prepend=valgrind or --profile=valgrind: uses valgrind
 	    memory analyser; the optional ProfileOptionString string will be added in
@@ -302,6 +308,10 @@ function SetupProfiler() {
 	case "$Profiler" in
 		( 'fast' )
 			PrependExecutable="profrun"
+			PrependExecutableParameters=( "${ProfilerToolParams[@]}" )
+			;;
+		( 'allinea' )
+			PrependExecutable="map"
 			PrependExecutableParameters=( "${ProfilerToolParams[@]}" )
 			;;
 		( 'Open|SpeedShop' )
@@ -799,6 +809,15 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 				;;
 			( '--fast' | '-F' )
 				Profiler="fast"
+				;;
+			#
+			# Allinea profiler (http://www.allinea.com/products/map)
+			( '--allinea='* )
+				Profiler="allinea"
+				ProfilerToolParams=( "${Param#--*=}" )
+				;;
+			( '--allinea' | '-A' )
+				Profiler="allinea"
 				;;
 			#
 			# Open|SpeedShop profiler

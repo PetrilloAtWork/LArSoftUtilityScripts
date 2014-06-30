@@ -66,6 +66,7 @@ unset local_setup_autodetection_script
 declare local_setup_mode="$(tr '[:upper:]' '[:lower:]' <<< "${1:-all}")"
 case "$local_setup_mode" in
 	( 'base' | 'develop' | 'runtime' | 'all' ) ;;
+	( 'step_'* ) ;;
 	( * ) local_setup_mode='all' ;;
 esac
 
@@ -118,7 +119,7 @@ declare -i local_setup_nOutput=0
 ### base setup (all modes)
 ###
 case "$local_setup_mode" in
-	( 'base' | 'runtime' | 'develop' | 'prod' | 'all' )
+	( 'base' | 'runtime' | 'develop' | 'prod' | 'all' | 'step_base' )
 		local_setup_element 'base' || let ++local_setup_myErrors
 		;;
 	( * ) ;;
@@ -128,7 +129,7 @@ esac
 ### local products UPS setup (all modes except base)
 ###
 case "$local_setup_mode" in
-	( 'runtime' | 'develop' | 'all' )
+	( 'runtime' | 'develop' | 'all' | 'step_localproducts' )
 		local_setup_element 'localproducts' || let ++local_setup_myErrors
 		;;
 	( * ) ;;
@@ -138,7 +139,7 @@ esac
 ### LArSoft setup (runtime and "all" modes)
 ###
 case "$local_setup_mode" in
-	( 'runtime' | 'prod' | 'all' )
+	( 'runtime' | 'prod' | 'all' | 'step_larsoft' )
 		local_setup_element 'larsoft' || let ++local_setup_myErrors
 		;;
 	( * ) ;;
@@ -148,7 +149,7 @@ esac
 ### build environment setup
 ###
 case "$local_setup_mode" in
-	( 'develop' | 'all' )
+	( 'develop' | 'all' | 'step_build' )
 		local_setup_element 'build' || let ++local_setup_myErrors
 		;;
 	( * ) ;;

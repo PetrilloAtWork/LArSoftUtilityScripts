@@ -83,6 +83,7 @@ case "$local_setup_mode" in
 		declare -i local_setup_nErrors=0
 		declare local_setup_base_script
 		[[ -d "/grid/fermiapp" ]] && local_setup_base_type="local"
+		
 		case "$local_setup_experiment" in
 			( 'MicroBooNE' )
 				# MicroBooNE setup adds to the above a specific UPS repository
@@ -122,6 +123,7 @@ case "$local_setup_mode" in
 				fi
 				;;
 		esac
+		
 		if [[ "$local_setup_base_script" == ":golocal:" ]]; then
 			# this is experiment-agnostic setup:
 			echo " * local LArSoft setup"
@@ -132,9 +134,14 @@ case "$local_setup_mode" in
 				setup git || let ++local_setup_nErrors
 				setup gitflow || let ++local_setup_nErrors
 			fi
+			# set up MRB (current version)
 			setup mrb || let ++local_setup_nErrors
 			export MRB_PROJECT=larsoft
 		fi
+		
+		# set up UPS again, in case some newer version has become available
+		setup ups || let ++local_setup_nErrors
+		
 		unset local_setup_base_script
 		if [[ $local_setup_nErrors -gt 0 ]]; then
 			unset local_setup_nErrors
