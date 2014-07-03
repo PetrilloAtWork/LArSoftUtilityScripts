@@ -33,10 +33,12 @@
 #     support per-event reseeding
 # 1.12 (petrillo@fnal.gov)
 #     support Allinea "map" profiler
+# 1.13 (petrillo@fnal.gov)
+#     extract random seeds from a log file
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.12"
+SCRIPTVERSION="1.13"
 
 DATETAG="$(datetag)"
 
@@ -122,6 +124,11 @@ function help() {
 	    use FILENAME as the file to restore the random seeds, optionally changing
 	    its name/location into ALIAS; currently the FCL file must have the ALIAS
 	    path already in, for this to work
+	--seedfromlog=LOGFILE
+	    extract seeds from LOGFILE; this option is currently very stupid: it
+	    ignores the generator label, it assumes that the module with the random
+	    generator is producer, and that it has a "Seed" configuration option;
+	    if any of these assumptions fail, the option will silently not work
 	--precfg=FILE
 	--include=FILE
 	    includes FILE in the FCL: the first option includes FILE before the main
@@ -311,8 +318,16 @@ function SetupProfiler() {
 			PrependExecutableParameters=( "${ProfilerToolParams[@]}" )
 			;;
 		( 'allinea' )
+			OutputFile="${JobName}-allinea.map"
 			PrependExecutable="map"
-			PrependExecutableParameters=( "${ProfilerToolParams[@]}" )
+			# specify only one MPI process
+			PrependExecutableParameters=(
+				'-profile'
+				'-output' "$OutputFile"
+				'-log' "${OutputFile%.map}.log"
+				'-n 1'
+				"${ProfilerToolParams[@]}"
+			)
 			;;
 		( 'Open|SpeedShop' )
 			case $(LowerCase ProfilerTool) in
@@ -707,6 +722,25 @@ function ConfigurationReseeder() {
 } # ConfigurationReseeder()
 
 
+function RandomSeedExtractor() {
+	# Extracts random generator seeds from an existing log file.
+	# Outputs a set of typical FHICL instructions to use them.
+	# 
+	# The output assumes that the module has a "Seed" configuration parameter.
+	#
+	local LogFile="$1"
+	[[ -r "$LogFile" ]] || return 2
+	local Line Pulp InstanceName EngineLabel RandomSeed
+	while read Line ; do
+		Pulp="$(sed -e 's/.*Instantiated .* engine "\([[:alpha:]:_]*\)" with seed \([[:digit:]]\+\)\..*/\1:\2/g' <<< "$Line")"
+		[[ "$Pulp" == "$Line" ]] && continue
+		IFS=: read InstanceName EngineLabel RandomSeed <<< "$Pulp"
+		echo "physics.producers.${InstanceName}.Seed: $RandomSeed"
+	done < "$LogFile"
+	return 0
+} # RandomSeedExtractor()
+
+
 function InterruptHandler() {
 	echo
 	STDERR "Interruption requested."
@@ -779,6 +813,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 					RestoreSeed="$(basename "$SavedSeed")"
 				fi
 				;;
+			( '--seedfromlog='* ) SeedLogFile="${Param#--*=}" ;;
 			
 			### profiling options
 			( '--prepend='* )
@@ -1023,6 +1058,7 @@ done
 # copy the file with the seeds to be restored in the final destination
 RestoreSeed="$(ImportFileInWorkArea "$SavedSeed" "$WorkDir" "$RestoreSeed")"
 
+declare SeedLogPath="$(MakeAbsolute "$SeedLogFile")"
 
 #
 # time to move into the working area (if any)
@@ -1063,6 +1099,15 @@ if isFlagSet UseConfigWrapper ; then
 	#include "${ConfigPath}"
 	EOC
 	
+	if [[ -n "$SeedLogPath" ]]; then
+		[[ -r "$SeedLogPath" ]] || FATAL 2 "Can't read log file '${SeedLogPath}' to extract seeds."
+		cat <<-EOS >> "$WrappedConfigPath"
+		
+		# seeds extracted from "${SeedLogPath}"
+		EOS
+		RandomSeedExtractor "$SeedLogPath" >> "$WrappedConfigPath"
+	fi
+	
 	if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
 		cat <<-EOI >> "$WrappedConfigPath"
 		
@@ -1098,6 +1143,7 @@ else
 	[[ "${#AppendConfigLines[@]}" -eq 0 ]] || FATAL 1 "Can't inject additional configuration lines when config wrapping is disabled."
 	[[ "${#AppendConfigFiles[@]}" -eq 0 ]] || FATAL 1 "Can't include additional configuration files when config wrapping is disabled."
 	[[ "${#PrependConfigFiles[@]}" -eq 0 ]] || FATAL 1 "Can't prepend additional configuration files when config wrapping is disabled."
+	[[ -z "$SeedLogFile" ]] || FATAL 1 "Can't use random seeds from a log file when config wrapping is disabled."
 fi
 
 
@@ -1134,8 +1180,9 @@ LASTFATAL "Error setting up the profiling tool '${Profiler}'. Quitting."
 #
 # execute the command
 #
+LarExecutable="$(which lar)"
 declare -a BaseCommand
-BaseCommand=( lar -c "$WrappedConfigPath" "${SourceParams[@]}" "${LArParams[@]}" )
+BaseCommand=( "${LarExecutable:-'lar'}" -c "$WrappedConfigPath" "${SourceParams[@]}" "${LArParams[@]}" )
 
 declare -a Command
 SetupCommand "${BaseCommand[@]}"
