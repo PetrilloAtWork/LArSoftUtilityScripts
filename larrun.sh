@@ -323,8 +323,8 @@ function SetupProfiler() {
 			# specify only one MPI process
 			PrependExecutableParameters=(
 				'-profile'
-				'-output' "$OutputFile"
-				'-log' "${OutputFile%.map}.log"
+				'-output' "./${OutputFile}"
+				'-log' "./${OutputFile%.map}.log.xml"
 				'-n 1'
 				"${ProfilerToolParams[@]}"
 			)
