@@ -731,12 +731,13 @@ function RandomSeedExtractor() {
 	local LogFile="$1"
 	[[ -r "$LogFile" ]] || return 2
 	local Line Pulp InstanceName EngineLabel RandomSeed
-	while read Line ; do
+	# using grep to skim the log file is faster than doing it with this loop
+	grep 'engine' "$LogFile" | while read Line ; do
 		Pulp="$(sed -e 's/.*Instantiated .* engine "\([[:alpha:]:_]*\)" with seed \([[:digit:]]\+\)\..*/\1:\2/g' <<< "$Line")"
 		[[ "$Pulp" == "$Line" ]] && continue
 		IFS=: read InstanceName EngineLabel RandomSeed <<< "$Pulp"
 		echo "physics.producers.${InstanceName}.Seed: $RandomSeed"
-	done < "$LogFile"
+	done
 	return 0
 } # RandomSeedExtractor()
 
@@ -1105,6 +1106,7 @@ if isFlagSet UseConfigWrapper ; then
 		
 		# seeds extracted from "${SeedLogPath}"
 		EOS
+		STDERR "Extracting seeds from log '${SeedLogFile}'..."
 		RandomSeedExtractor "$SeedLogPath" >> "$WrappedConfigPath"
 	fi
 	
