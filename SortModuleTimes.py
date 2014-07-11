@@ -14,6 +14,8 @@
 #   permissive option to ignore errors in the input
 # 1.4 (20140618, petrillo@fnal.gov)
 #   updating from optparse to argparse
+# 1.5 (20140711, petrillo@fnal.gov)
+#   improved parsing relying on end-of-event markers; using python 2.7
 #
 
 import sys, os
@@ -21,10 +23,11 @@ import math
 import gzip
 try: import bz2
 except ImportError: pass
+from collections import OrderedDict
 
 import argparse
 
-Version = "%(prog)s 1.3"
+Version = "%(prog)s 1.5"
 __doc__ = "Prints statistics of the module timings based on the information from the Timing service."
 
 #
@@ -89,27 +92,97 @@ class Stats:
 # class Stats
 
 
+class EventKeyClass(tuple):
+	def run(self): return self[0]
+	def subRun(self): return self[1]
+	def event(self): return self[2]
+	
+	def __str__(self):
+		return "run %d subRun %d event %d" \
+		  % (self.run(), self.subRun(), self.event())
+	# __str__()
+# class EventKeyClass
+
+
+class ModuleKeyClass(tuple):
+	def name(self): return self[1]
+	def instance(self): return self[0]
+	
+	def __str__(self): return "%s[%s]" % (self.name(), self.instance())
+# class ModuleKeyClass
+
+
+class EntryDataClass(object):
+	def __init__(self, eventKey, **kargs):
+		self.data = kargs
+		self.data.setdefault('time', None)
+		self.eventKey = eventKey
+	# __init__()
+	
+	def __getattr__(self, attrName):
+		# we expect this will be called only if no attrName already exists
+		try: return self.data[attrName]
+		except KeyError: raise AttributeError(attrName)
+	# __getattr__()
+	
+	def time(self):
+		try: return self.data['time']
+		except KeyError: return None
+	# time()
+	
+	def isModule(self):
+		try: return bool(self.module)
+		except AttributeError: return False
+	# isEvent()
+	
+	def isEvent(self): return not self.isModule()
+	
+	def isMissing(self): return self.time() is None
+	
+	def SetMissing(self): self.data['time'] = None
+	
+	def __str__(self):
+		s = str(self.eventKey)
+		if self.isModule(): s += " module " + str(self.module)
+		else:               s += " event"
+		s += ": ";
+		if self.time() is None: s += "(n/a)"
+		else: s += "%g s" % self.time()
+		return s
+	# __str__()
+	
+# class EntryDataClass
+
+
 class TimeModuleStatsClass(Stats):
 	def __init__(self, moduleKey, bTrackEntries = False):
 		Stats.__init__(self)
 		self.key = moduleKey
-		if bTrackEntries:
-			self.entries = []
-			self.entryKeys = set()
-		else:
-			self.entries = self.entryKeys = None
+		self.entries = OrderedDict() if bTrackEntries else None
 	# __init__()
 	
 	def add(self, data):
 		if self.entries is not None:
-			eventKey = ( data['run'], data['subRun'], data['event'], )
-			if eventKey in self.entryKeys: return False
-			self.entries.append(data)
-			self.entryKeys.add(eventKey)
+			if data.eventKey in self.entries: return False
+			self.entries[data.eventKey] = data
 		# if
-		if data['time'] is not None: Stats.add(self, data['time'])
+		if not data.isMissing(): Stats.add(self, data.time())
 		return True
 	# add()
+	
+	def complete(self, eventKeys):
+		if self.entries is None: return 0
+		if (len(self.entries) > 1): eventKeys = eventKeys[-1:]
+		res = 0
+		for eventKey in eventKeys:
+			if self.add(EntryDataClass(eventKey)): res += 1
+		return res
+	# complete()
+	
+	def getEvents(self):
+		return [] if self.entries is None else self.entries.keys()
+	def getEntries(self):
+		return [] if self.entries is None else self.entries.values()
 	
 	def nEntries(self): return len(self.entries)
 	def nEvents(self): return self.n()
@@ -117,7 +190,7 @@ class TimeModuleStatsClass(Stats):
 	
 	def FormatStatsAsList(self, format_ = None):
 		if isinstance(self.key, basestring): name = str(self.key)
-		else: name = "%s[%s]" % (self.key[1], self.key[0])
+		else: name = str(self.key)
 		if (self.n() == 0) or (self.sum() == 0.):
 			return [ name, "n/a" ]
 		RMS = self.rms() if (self.n() != 0) else 0.
@@ -132,21 +205,23 @@ class TimeModuleStatsClass(Stats):
 	
 	def FormatTimesAsList(self, format_ = {}):
 		if isinstance(self.key, basestring): name = str(self.key)
-		else: name = "%s[%s]" % (self.key[1], self.key[0])
+		else: name = str(self.key)
 		
 		n = min(self.nEntries(), format_.get('max_events', self.nEntries()))
 		format_str = format_.get('format', '%g')
 		if not self.entries: return [ name, ] + [ "n/a", ] * n
 		
 		output = [ name, ]
-		for entry in self.entries[:n]:
-			if entry is None: output.append("n/a")
-			else:             output.append(format_str % entry['time'])
+		for i, entry in enumerate(self.entries.values()):
+			if i >= n: break
+			if entry is None or entry.isMissing(): output.append("n/a")
+			else: output.append(format_str % entry.time())
 		# for
 		return output
 	# FormatTimesAsList()
 	
 # class TimeModuleStatsClass
+
 
 class JobStatsClass:
 	def __init__(self, jobName = None):
@@ -178,7 +253,7 @@ class JobStatsClass:
 			if key < len(self.moduleList):
 				if self.moduleList[key].key != value.key:
 					raise RuntimeError(
-					  "Trying to overwrite stats of module %r at #%d with module %r"
+					  "Trying to overwrite stats of module %s at #%d with module %s"
 					  % (self.moduleList[key].key, key, value.key)
 					  )
 				# if key mismatch
@@ -200,10 +275,16 @@ class JobStatsClass:
 	# __setitem__()
 # class JobStatsClass
 
+
 #
 # format parsing
 #
-class FormatError(RuntimeError): pass
+class FormatError(RuntimeError):
+	def __init__(self, msg, **kargs):
+		RuntimeError.__init__(self, msg)
+		self.data = kargs
+	# __init__()
+# class FormatError
 
 def ParseTimeModuleLine(line):
 	#
@@ -212,27 +293,33 @@ def ParseTimeModuleLine(line):
 	#
 	Tokens = line.split()
 	
+	ModuleKey = None
+	EventKey = None
+	time = None
+	try:
+		EventKey = EventKeyClass((int(Tokens[2]), int(Tokens[4]), int(Tokens[6])))
+		ModuleKey = ModuleKeyClass((Tokens[7], Tokens[8]))
+		time=float(Tokens[9])
+	except Exception, e:
+		raise FormatError(
+		  "TimeModule format not recognized: '%s' (%s)" % (line, str(e)),
+		  type="Module", event=EventKey, module=ModuleKey
+		  )
+	# try ... except
+	
 	if (Tokens[0] != 'TimeModule>') \
 	  or (Tokens[1] != 'run:') \
 	  or (Tokens[3] != 'subRun:') \
 	  or (Tokens[5] != 'event:') \
 	  or (len(Tokens) != 10) \
 	  :
-		raise FormatError("TimeModule format not recognized: '%s'" % line)
-	
-	try:
-		return {
-			'run': int(Tokens[2]),
-			'subRun': int(Tokens[4]),
-			'event': int(Tokens[6]),
-			'module': (Tokens[7], Tokens[8]),
-			'time': float(Tokens[9]),
-		}
-	except Exception, e:
 		raise FormatError \
-		  ("TimeModule format not recognized: '%s' (%s)" % (line, str(e)))
-	# try ... except
+		  ("TimeModule format not recognized: '%s'" % line, type="Module")
+	# if
+	
+	return EntryDataClass(EventKey, module=ModuleKey, time=time)
 # ParseTimeModuleLine()
+
 
 def ParseTimeEventLine(line):
 	#
@@ -241,26 +328,122 @@ def ParseTimeEventLine(line):
 	#
 	Tokens = line.split()
 	
+	EventKey = None
+	time = None
+	try:
+		EventKey = EventKeyClass((int(Tokens[2]), int(Tokens[4]), int(Tokens[6])))
+		time = float(Tokens[7])
+	except Exception, e:
+		raise FormatError(
+		  "TimeEvent format not recognized: '%s' (%s)" % (line, str(e)),
+		  type="Event", event=EventKey
+		  )
+	# try ... except
+	
 	if (Tokens[0] != 'TimeEvent>') \
 	  or (Tokens[1] != 'run:') \
 	  or (Tokens[3] != 'subRun:') \
 	  or (Tokens[5] != 'event:') \
 	  or (len(Tokens) != 8) \
 	  :
-		raise FormatError("TimeEvent format not recognized: '%s'" % line)
+		raise FormatError("TimeEvent format not recognized: '%s'" % line,
+		  type="Event", event=EventKey)
+	# if
 	
-	try:
-		return {
-			'run': int(Tokens[2]),
-			'subRun': int(Tokens[4]),
-			'event': int(Tokens[6]),
-			'time': float(Tokens[7]),
-		}
-	except Exception, e:
-		raise FormatError \
-		  ("TimeEvent format not recognized: '%s' (%s)" % (line, str(e)))
-	# try ... except
+	return EntryDataClass(EventKey, time=time)
 # ParseTimeEventLine()
+
+
+def OPEN(Path, mode = 'r'):
+	if Path.endswith('.bz2'): return bz2.BZ2File(Path, mode)
+	if Path.endswith('.gz'): return gzip.GzipFile(Path, mode)
+	return open(Path, mode)
+# OPEN()
+
+
+def ParseInputFile(InputFilePath, AllStats, EventStats, options):
+	
+	def CompleteEvent(CurrentEvent, EventStats):
+		EventStats.complete(( CurrentEvent, ))
+		for ModuleStats in AllStats:
+			ModuleStats.complete(EventStats.getEvents())
+	# CompleteEvent()
+	
+	
+	LogFile = OPEN(InputFilePath, 'r')
+	
+	nErrors = 0
+	LastLine = None
+	CurrentEvent = None
+	for iLine, line in enumerate(LogFile):
+		
+		line = line.strip()
+		if line == LastLine: continue # duplicate line
+		LastLine = line
+		
+		if line.startswith("TimeModule> "):
+			
+			try:
+				TimeData = ParseTimeModuleLine(line)
+			except FormatError, e:
+				nErrors += 1
+				msg = "Format error on '%s'@%d" % (InputFilePath, iLine + 1)
+				try: msg += " (%s)" % str(e.data['type'])
+				except KeyError: pass
+				try: msg += ", for event " + str(e.data['event'])
+				except KeyError: pass
+				try: msg += ", module " + str(e.data['module'])
+				except KeyError: pass
+				print >>sys.stderr, msg
+				if not options.Permissive: raise
+				else:                      continue
+			# try ... except
+			
+			try:
+				ModuleStats = AllStats[TimeData.module]
+			except KeyError:
+				ModuleStats = TimeModuleStatsClass \
+				  (TimeData.module, bTrackEntries=options.CheckDuplicates)
+				AllStats[TimeData.module] = ModuleStats
+			#
+			
+			ModuleStats.add(TimeData)
+		elif line.startswith("TimeEvent> "):
+			try:
+				TimeData = ParseTimeEventLine(line)
+			except FormatError, e:
+				nErrors += 1
+				msg = "Format error on '%s'@%d" % (InputFilePath, iLine + 1)
+				try: msg += " (%s)" % str(e.data['type'])
+				except KeyError: pass
+				try: msg += ", for event " + str(e.data['event'])
+				except KeyError: pass
+				try: msg += ", module " + str(e.data['module'])
+				except KeyError: pass
+				print >>sys.stderr, msg
+				if not options.Permissive: raise
+				else:                      continue
+			# try ... except
+			
+			EventStats.add(TimeData)
+			if (options.MaxEvents >= 0) \
+			  and (EventStats.n() >= options.MaxEvents):
+				if CurrentEvent: CompleteEvent(CurrentEvent, EventStats)
+				raise NoMoreInput
+		else:
+			TimeData = None
+			continue
+		
+		if (CurrentEvent != TimeData.eventKey):
+			if TimeData and CurrentEvent: CompleteEvent(CurrentEvent, EventStats)
+			CurrentEvent = TimeData.eventKey
+		# if
+	# for line in log file
+	if CurrentEvent: CompleteEvent(CurrentEvent, EventStats)
+	
+	return nErrors
+# ParseInputFile()
+
 
 #
 # output
@@ -483,69 +666,6 @@ class TabularAlignmentClass:
 # class TabularAlignmentClass
 
 
-
-def OPEN(Path, mode = 'r'):
-	if Path.endswith('.bz2'): return bz2.BZ2File(Path, mode)
-	if Path.endswith('.gz'): return gzip.GzipFile(Path, mode)
-	return open(Path, mode)
-# OPEN()
-
-
-def ParseInputFile(InputFilePath, AllStats, EventStats, options):
-	
-	LogFile = OPEN(InputFilePath, 'r')
-	
-	nErrors = 0
-	LastLine = None
-	for iLine, line in enumerate(LogFile):
-		
-		line = line.strip()
-		if line == LastLine: continue # duplicate line
-		LastLine = line
-		
-		if line.startswith("TimeModule> "):
-			
-			try:
-				TimeData = ParseTimeModuleLine(line)
-			except FormatError, e:
-				nErrors += 1
-				print >>sys.stderr, \
-				  "Format error on '%s'@%d" % (InputFilePath, iLine)
-				if not options.Permissive: raise
-				else:                      continue
-			# try ... except
-			
-			try:
-				ModuleStats = AllStats[TimeData['module']]
-			except KeyError:
-				ModuleStats = TimeModuleStatsClass \
-				  (TimeData['module'], bTrackEntries=bTrackEntries)
-				AllStats[TimeData['module']] = ModuleStats
-			#
-			
-			ModuleStats.add(TimeData)
-		elif line.startswith("TimeEvent> "):
-			try:
-				TimeData = ParseTimeEventLine(line)
-			except FormatError, e:
-				nErrors += 1
-				print >>sys.stderr, \
-				  "Format error on '%s'@%d" % (InputFilePath, iLine)
-				if not options.Permissive: raise
-				else:                      continue
-			# try ... except
-			
-			EventStats.add(TimeData)
-			if (options.MaxEvents >= 0) \
-			  and (EventStats.n() >= options.MaxEvents):
-				raise NoMoreInput
-		else: continue
-		
-	# for line in log file
-	
-	return nErrors
-# ParseInputFile()
-
 if __name__ == "__main__": 
 	
 	Parser = argparse.ArgumentParser(description=__doc__)
@@ -558,6 +678,8 @@ if __name__ == "__main__":
 	# options
 	Parser.add_argument("--eventtable", dest="PresentMode", action="store_const",
 	  const="EventTable", help="do not group the pages by node")
+	Parser.add_argument("--allowduplicates", '-D', dest="CheckDuplicates",
+	  action="store_false", help="do not check for duplicate entries")
 	Parser.add_argument("--maxevents", dest="MaxEvents", type=int, default=-1,
 	  help="limit the number of parsed events to this (negative: no limit)")
 	Parser.add_argument("--permissive", dest="Permissive", action="store_true",
@@ -566,10 +688,12 @@ if __name__ == "__main__":
 	
 	options = Parser.parse_args()
 	
-	bTrackEntries = options.PresentMode in ( 'EventTable', )
+	if options.PresentMode in ( 'EventTable', ):
+		options.CheckDuplicates = True
+	
 	AllStats = JobStatsClass( )
-	EventStats \
-	  = TimeModuleStatsClass("=== events ===", bTrackEntries=bTrackEntries)
+	EventStats = TimeModuleStatsClass \
+	  ("=== events ===", bTrackEntries=options.CheckDuplicates)
 	
 	class NoMoreInput: pass
 	
