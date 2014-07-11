@@ -325,7 +325,7 @@ function SetupProfiler() {
 				'-profile'
 				'-output' "./${OutputFile}"
 				'-log' "./${OutputFile%.map}.log.xml"
-				'-n 1'
+				'-n' '1' '-nompi'
 				"${ProfilerToolParams[@]}"
 			)
 			;;
