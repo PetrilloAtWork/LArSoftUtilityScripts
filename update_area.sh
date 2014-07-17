@@ -76,6 +76,28 @@ function SortUPSqualifiers() {
 } # SortUPSqualifiers()
 
 
+function CheckSetup() {
+	#
+	# checks that everything is fine with the current settings
+	#
+	which ups >& /dev/null || FATAL 1 "UPS not configured!"
+	[[ -n "$MRB_TOP" ]] || FATAL 1 "mrb working area not set up!"
+	
+	if ! declare -f setup unsetup >& /dev/null ; then
+		ERROR "setup/unsetup not available!"
+		cat <<-EOM
+		UPS is correctly set up, but its setup/unsetup functions are not visible to scripts.
+		A way to correct that in bash is to execute:
+		
+		export -f setup unsetup
+		
+		EOM
+		FATAL 1 "UPS is not fully operative in script environment."
+	fi
+	return 0
+} # CheckSetup()
+
+
 ################################################################################
 #
 # parameters parser
@@ -131,7 +153,7 @@ declare Qualifiers="$(SortUPSqualifiers "${Params[1]:-${MRB_QUALS}}")"
 #
 # check that everything is fine with the current settings
 #
-[[ -n "$MRB_TOP" ]] || FATAL 1 "mrb is not configured!"
+CheckSetup || FATAL 1 "Configuration check failed."
 
 pushd "$MRB_TOP" >& /dev/null
 LASTFATAL "The working area '${MRB_TOP}' does not exist."
