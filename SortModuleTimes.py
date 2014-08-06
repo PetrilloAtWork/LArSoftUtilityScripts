@@ -25,7 +25,6 @@ try: import bz2
 except ImportError: pass
 from collections import OrderedDict
 
-import argparse
 
 Version = "%(prog)s 1.5"
 __doc__ = "Prints statistics of the module timings based on the information from the Timing service."
@@ -667,6 +666,8 @@ class TabularAlignmentClass:
 
 
 if __name__ == "__main__": 
+	import argparse
+	
 	
 	Parser = argparse.ArgumentParser(description=__doc__)
 	Parser.set_defaults(PresentMode="ModTable")
@@ -708,7 +709,7 @@ if __name__ == "__main__":
 	# give a bit of separation between error messages and actual output
 	if nErrors > 0: print >>sys.stderr
 	
-	if AllStats.MaxEvents() == 0:
+	if (AllStats.MaxEvents() == 0) and (EventStats.nEntries() == 0):
 		print "No time statistics found."
 		sys.exit(1)
 	# if
