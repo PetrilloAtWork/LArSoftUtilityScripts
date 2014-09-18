@@ -35,10 +35,14 @@
 #     support Allinea "map" profiler
 # 1.13 (petrillo@fnal.gov)
 #     extract random seeds from a log file
+# 1.14 (petrillo@fnal.gov)
+#     added the current working directory and its job subdirectory to FHiCL
+#     search path for sand box jobs
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.13"
+SCRIPTVERSION="1.14"
+CWD="$(pwd)"
 
 DATETAG="$(datetag)"
 
@@ -267,11 +271,35 @@ function MakeAbsolute() {
 	[[ -n "$Path" ]] || return 0
 	if isAbsolute "$Path" ; then
 		echo "$Path"
+	elif [[ "$Path" == "." ]]; then
+		echo "${Cwd:-"."}"
 	else
 		echo "${Cwd:+${Cwd}/}${Path}"
 	fi
 	return 0
 } # MakeAbsolute()
+
+
+function MakePathListAbsolute() {
+	# MakePathListAbsolute PathList [BaseDir] [Separator]
+	local PathList="$1"
+	local BaseDir="${2:-"$(pwd)"}"
+	local Separator="${3:-":"}"
+	
+	local OldIFS="$IFS"
+	local -i iPath=0
+	IFS="$Separator"
+	local Path NewPathsList
+	# an additional separator trailing the input is needed to parse the last element
+	while read -d "${Separator}" Path ; do
+		local NewPath="$(MakeAbsolute "${Path#./}" "$BaseDir")"
+		[[ $iPath -gt 0 ]] && NewPathsList+="$Separator"
+		NewPathsList+="$NewPath"
+		let ++iPath
+	done <<< "${PathList}${Separator}" 
+	IFS="$OldIFS"
+	echo "$NewPathsList"
+} # MakePathListAbsolute()
 
 
 function FindNextFile() {
@@ -1138,8 +1166,11 @@ if isFlagSet UseConfigWrapper ; then
 		# the wrapper includes;
 		# this is not safe outside the sandbox since there could be other FCL files
 		# in the current directory, which would override in an unexpected way the
-		# others in case of inclusion (very unlikely, but a real nightmare to verify)
-		FHICL_FILE_PATH=".:${FHICL_FILE_PATH}"
+		# others in case of inclusion (very unlikely, but a real nightmare to verify).
+		# Also, make sure we can find the files the user could see
+		FHICL_FILE_PATH=".:$(MakePathListAbsolute "$FHICL_FILE_PATH" "$CWD")"
+		DBGN 2 "Expanded FHICL_FILE_PATH relative to '${CWD}':"
+		DBGN 2 "FHICL_FILE_PATH=${FHICL_FILE_PATH}"
 	fi
 else
 	[[ "${#AppendConfigLines[@]}" -eq 0 ]] || FATAL 1 "Can't inject additional configuration lines when config wrapping is disabled."
