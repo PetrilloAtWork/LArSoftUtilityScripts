@@ -196,7 +196,7 @@ if [[ "$iDestRepo" -lt 0 ]]; then
 	ExitCode=1
 	iDestRepo=0
 elif [[ "$iDestRepo" -ge $NRepositories ]]; then
-	ERROR "We can't go past the last repository ('${Repositories[-1]}')"
+	ERROR "We can't go past the last repository ('${Repositories[$NRepositories-1]}')"
 	ExitCode=1
 	iDestRepo=$(($NRepositories-1))
 fi
