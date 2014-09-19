@@ -17,3 +17,9 @@ fi
 if [[ -x "${LARSCRIPTDIR}/FindInPath.sh" ]]; then
 	alias FindFCL="${LARSCRIPTDIR}/FindInPath.sh --fcl"
 fi
+
+if [[ -x "${LARSCRIPTDIR}/largotorepo.sh" ]]; then
+	function gotorepo() { cd "$("${LARSCRIPTDIR}/largotorepo.sh" "$@" )" ; }
+	function nextrepo() { gotorepo ${1:-+1} ; }
+	function prevrepo() { gotorepo -${1:-1} ; }
+fi
