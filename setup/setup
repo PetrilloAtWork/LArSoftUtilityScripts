@@ -65,7 +65,7 @@ unset local_setup_autodetection_script
 ###
 declare local_setup_mode="$(tr '[:upper:]' '[:lower:]' <<< "${1:-all}")"
 case "$local_setup_mode" in
-	( 'base' | 'develop' | 'runtime' | 'all' ) ;;
+	( 'base' | 'develop' | 'runtime' | 'all' | 'prod' ) ;;
 	( 'step_'* ) ;;
 	( * ) local_setup_mode='all' ;;
 esac
