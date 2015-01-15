@@ -15,6 +15,8 @@ fi
 SCRIPTNAME="$(basename -- "$0")"
 SCRIPTVERSION="1.0"
 
+declare -ar SkipRepositories=( 'ubutil' 'lbneutil' )
+
 function help() {
 	cat <<-EOH
 	Updates the working area to allow for a new version.
@@ -56,8 +58,20 @@ function FATAL() {
 } # FATAL()
 function LASTFATAL() {
 	local Code="$?"
-	[[ "$Code" != 0 ]] && FATAL "$Code""$@"
+	[[ "$Code" != 0 ]] && FATAL "$Code" "$@"
 } # LASTFATAL()
+
+function IsInList() {
+	# Usage:  IsInList Key [Item ...]
+	# Returns 0 if the key is one of the other specified items
+	local Key="$1"
+	shift
+	local Item
+	for Item in "$@" ; do
+		[[ "$Item" == "$Key" ]] && return 0
+	done
+	return 1
+} # IsInList()
 
 
 function SortUPSqualifiers() {
@@ -98,11 +112,26 @@ function CheckSetup() {
 } # CheckSetup()
 
 
+function PackageList() {
+	local -i nPackages=0
+	for GitDir in "$MRB_SOURCE"/*/.git ; do
+		PackageDir="$(dirname "$GitDir")"
+		PackageName="$(basename "$PackageDir")"
+		IsInList "$PackageName" "${SkipRepositories[@]}" && continue
+		echo "$PackageName"
+		let ++nPackages
+	done
+	[[ $nPackages -gt 0 ]]
+} # PackageList()
+
+
+
 ################################################################################
 #
 # parameters parser
 #
 declare DoHelp=0 DoVersion=0
+declare Version
 
 declare -i NoMoreOptions=0
 declare -a Params
@@ -147,8 +176,11 @@ fi
 
 [[ -n "$ExitCode" ]] && exit $ExitCode
 
-declare Version="${Params[0]}"
-declare Qualifiers="$(SortUPSqualifiers "${Params[1]:-${MRB_QUALS}}")"
+declare -i iParam=0
+[[ -z "$Version" ]] && Version="${Params[iParam++]}"
+
+declare QualifierSpecs="${Params[iParam++]:-"$MRB_QUALS"}"
+declare Qualifiers="$(SortUPSqualifiers "$QualifierSpecs")"
 
 #
 # check that everything is fine with the current settings
@@ -167,10 +199,8 @@ if [[ -z "$Version" ]]; then
 	if [[ -d "$MRB_SOURCE" ]]; then
 		declare ReferencePackage=""
 		declare HasMandatory=0
-		declare GitDir
-		for GitDir in "${MRB_SOURCE}/"*"/.git" ; do
-			declare PackageDir="$(dirname "$GitDir")"
-			declare PackageName="$(basename "$PackageDir")"
+		for PackageName in $(PackageList) ; do
+			declare PackageDir="${MRB_SOURCE}/${PackageName}"
 			
 			UPSfile="${PackageDir}/ups/product_deps"
 			[[ -r "$UPSfile" ]] || continue # no dependencies, no useful information

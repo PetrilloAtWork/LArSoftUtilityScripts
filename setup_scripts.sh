@@ -19,7 +19,11 @@ if [[ -x "${LARSCRIPTDIR}/FindInPath.sh" ]]; then
 fi
 
 if [[ -x "${LARSCRIPTDIR}/largotorepo.sh" ]]; then
-	function gotorepo() { cd "$("${LARSCRIPTDIR}/largotorepo.sh" "$@" )" ; }
+	function gotorepo() {
+		local DirName
+		DirName="$("${LARSCRIPTDIR}/largotorepo.sh" "$@" )"
+		[[ "$?" == 0 ]] && cd "$DirName"
+	}
 	function nextrepo() { gotorepo ${1:-+1} ; }
 	function prevrepo() { gotorepo -${1:-1} ; }
 fi

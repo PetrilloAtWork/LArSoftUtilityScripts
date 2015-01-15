@@ -5,15 +5,17 @@
 # Changes:
 # 1.0 (20140219, petrillo@fnal.gov)
 #     first version
+# 1.1 (20140925, petrillo@fnal.gov)
+#     updated default qualifiers (e5 -> e6)
 #
 
 SCRIPTNAME="$(basename "$0")"
-VERSION="1.0"
+VERSION="1.1"
 
 : ${BASEDIR:="."}
 
 declare -a StandardQualifiers
-StandardQualifiers=(       'debug:e5'  'e5:prof'   )
+StandardQualifiers=(       'debug:e6'  'e6:prof'   )
 StandardQualifierAliases=( 'debugging' 'profiling' )
 
 function help() {

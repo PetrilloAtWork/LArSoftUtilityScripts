@@ -1,13 +1,22 @@
 #!/bin/bash
 #
-# Fetches from the origin repository and rebases to the festure branches.
+# Fetches from the origin repository and rebases to the feature branches.
 # 
-# Usage:  larconnectgit.sh  RepoAlias RepoLocalPath
+# Usage:  larfetch.sh
+#
+# Versions
+# 20140306 petrillo@fnal.gov [v1.0]
+#   original version
+# 20141009 petrillo@fnal.gov [v1.1]
+#   do not rebase the branches, except for develop and the current branch
+#   (I noticed that I did not want to "automatically" update all my feature
+#   branches, since it often yields conflicts)
 #
 
 SCRIPTDIR="$(dirname "$0")"
-: ${BASEDIR:="$(dirname "$(readlink -f "$SCRIPTDIR")")"}
+VERSION="1.1"
 
+: ${BASEDIR:="$(dirname "$(readlink -f "$SCRIPTDIR")")"}
 : ${RepoAlias:="origin"}
 
 SourceDirName='srcs'
@@ -69,12 +78,13 @@ function GitFetchAndRebase() {
 			echo " - '${Branch}'"
 		fi
 		
-		git rebase "$@" "${RemoteRepo}/develop" "$Branch"
-		if [[ $? != 0 ]]; then
-			let ++nErrors
-			break
+		if [[ "$Branch" == 'develop' ]] || [[ "$Branch" == "$Current" ]]; then
+			git rebase "$@" "${RemoteRepo}/develop" "$Branch"
+			if [[ $? != 0 ]]; then
+				let ++nErrors
+				break
+			fi
 		fi
-		
 	done < <(git branch)
 	
 	if [[ -n "$Current" ]]; then

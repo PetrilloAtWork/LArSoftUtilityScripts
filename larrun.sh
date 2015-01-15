@@ -38,10 +38,14 @@
 # 1.14 (petrillo@fnal.gov)
 #     added the current working directory and its job subdirectory to FHiCL
 #     search path for sand box jobs
+# 1.15 (petrillo@fnal.gov)
+#     added an option to activate debugging output for specific modules
+# 1.16 (petrillo@fnal.gov)
+#     added optional configuration dump for lar1ndcode and t962code
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.14"
+SCRIPTVERSION="1.16"
 CWD="$(pwd)"
 
 DATETAG="$(datetag)"
@@ -76,9 +80,12 @@ declare -a StandardPackages
 StandardPackages=(
 	larcore lardata larevt larsim larreco larana
 	lareventdisplay larpandora larsoft
-	larexamples uboonecode lbnecode
+	larexamples
 )
-
+declare -a OptionalPackages
+OptionalPackages=(
+	uboonecode lbnecode lar1ndcode t962code
+)
 
 function help() {
 	cat <<-EOH
@@ -133,6 +140,10 @@ function help() {
 	    ignores the generator label, it assumes that the module with the random
 	    generator is producer, and that it has a "Seed" configuration option;
 	    if any of these assumptions fail, the option will silently not work
+	--debugmodules[=ModuleLabel,ModuleLabel,...]
+	    sets the message facility to enable debugging output for the specified
+	    module labels, or for all of them if none is specified; this overrides
+	    the module labels selection from the configuration file
 	--precfg=FILE
 	--include=FILE
 	    includes FILE in the FCL: the first option includes FILE before the main
@@ -258,6 +269,56 @@ function IsInList() {
 	done
 	return 1
 } # IsInList()
+
+
+function SplitBySep() {
+	# Usage:  SplitBySep  Separators Arg [Arg ...]
+	# 
+	# Splits the arguments at the specified separators and prints them one per line
+	#
+	local NewIFS="$1"
+	shift
+	local Args="$*"
+	
+	local OldIFS="$IFS"
+	IFS="$NewIFS"
+	local -a Words
+	while read -a Words ; do
+		local Word
+		for Word in "${Words[@]}" ; do
+			echo "$Word"
+		done
+	done <<< "$Args"
+	
+	IFS="$OldIFS"
+} # SplitBySep()
+
+
+function ListBySep() {
+	# Usage:  ListBySep  Separator [Arg Arg ...]
+	# 
+	# Merges all the arguments in a string, inserting a Separator between them
+	#
+	local Separator="$1"
+	shift
+	local -a Args=( "$@" )
+	local iArg
+	for (( iArg = 0 ; iArg < ${#Args[@]} ; ++iArg )); do
+		[[ $iArg == 0 ]] || echo -n "$Separator"
+		echo -n "${Args[iArg]}"
+	done
+	echo
+} # SplitBySep()
+
+
+function SplitByComma() {
+	local Words="$*"
+	SplitBySep ", " "$Words"
+} # SplitByComma()
+
+
+function ListByComma() { ListBySep ", " "$@" ; }
+
 
 function isAbsolute() {
 	local Path="$1"
@@ -577,17 +638,33 @@ function PrintLocalPackage() {
 } # PrintLocalPackage()
 
 function PrintPackageVersions() {
+	# Prints a list of the packages currently configured:
+	# - standard packages, from LArSoft (prints if missing)
+	# - optional packages, typically experiment code
+	# - any other package installed in the local MRB working area
+	# It returns the number of standard packages not configured.
 	
 	local -i nStandardMissing=0
 	
 	# first the default packages:
 	local Package
+	# - standard:
 	for Package in "${StandardPackages[@]}" ; do
-		
 		PrintLocalPackage "$Package"
-		[[ $? != 0 ]] && echo "${Package}: not configured!!!"
-		let ++nStandardMissing
+		if [[ $? != 0 ]]; then
+			echo "${Package}: not configured!!!"
+			let ++nStandardMissing
+		fi
 	done
+	# - optional:
+	local -a MissingOptional
+	for Package in "${OptionalPackages[@]}" ; do
+		PrintLocalPackage "$Package"
+		[[ $? != 0 ]] && MissingOptional=( "${MissingOptional[@]}" "$Package" )
+	done
+	if [[ ${#MissingOptional[@]} -gt 0 ]]; then
+		echo "${#MissingOptional[@]} optional packages missing: ${MissingOptional[@]}"
+	fi
 	
 	# other local packages
 	local UPSpackagePath
@@ -597,8 +674,8 @@ function PrintPackageVersions() {
 			
 			Package="$(basename "$UPSpackagePath")"
 			
-			# if is standard, we have printed it already
-			IsInList "$Package" "${StandardPackages[@]}" && continue
+			# if standard or optional, we have printed it already
+			IsInList "$Package" "${StandardPackages[@]}" "${OptionalPackages[@]}" && continue
 			
 			PrintLocalPackage "$Package"
 			
@@ -802,6 +879,7 @@ declare -i PrependExecutableNParameters
 declare -a PrependConfigFiles
 declare -a AppendConfigFiles
 declare -a AppendConfigLines
+declare -a DebugModules
 declare -i OneStringCommand=0
 for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
@@ -842,7 +920,9 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 					RestoreSeed="$(basename "$SavedSeed")"
 				fi
 				;;
-			( '--seedfromlog='* ) SeedLogFile="${Param#--*=}" ;;
+			( '--seedfromlog='* )          SeedLogFile="${Param#--*=}" ;;
+			( '--debugmodules' )           DebugModules=( "*" ) ;;
+			( '--debugmodules='* )         DebugModules=( $(SplitByComma "${Param#--*=}") ) ;;
 			
 			### profiling options
 			( '--prepend='* )
@@ -958,7 +1038,7 @@ done
 declare -i ExitCode NeedHelp=1
 if isFlagSet OnlyPrintEnvironment ; then
 	NeedHelp=0
-	PrintPackageVersions "${StandardPackages[@]}"
+	PrintPackageVersions
 	{ [[ -z "$ExitCode" ]] || [[ "$ExitCode" == 0 ]] ; } && ExitCode="$?"
 fi
 
@@ -1138,6 +1218,14 @@ if isFlagSet UseConfigWrapper ; then
 		RandomSeedExtractor "$SeedLogPath" >> "$WrappedConfigPath"
 	fi
 	
+	if [[ ${#DebugModules[@]} -gt 0 ]]; then
+		cat <<-EOI >> "$WrappedConfigPath"
+		
+		# enabling debugging output only for the following modules
+		services.message.debugModules: [ $(ListByComma "${DebugModules[@]}") ]
+		EOI
+	fi
+	
 	if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
 		cat <<-EOI >> "$WrappedConfigPath"
 		
@@ -1262,15 +1350,17 @@ if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
 fi
 cat <<EOM >> "$AbsoluteLogPath"
 ================================================================================
-$(PrintPackageVersions "${StandardPackages[@]}")
+$(PrintPackageVersions)
 ================================================================================
 EOM
 
 export FHICL_FILE_PATH # be sure it's clear...
 if isFlagSet DUMPCONFIG ; then
-	export ART_DEBUG_CONFIG="${JobName}.cfg"
-	echo "Configuration dump into: '${ART_DEBUG_CONFIG}'" >> "$AbsoluteLogPath"
-	"${BaseCommand[@]}" > /dev/null
+	export DebugConfigFile="${JobName}.cfg"
+#	export ART_DEBUG_CONFIG="$DebugConfigFile"
+	declare -a DumpCommand=( "${BaseCommand[0]}" --debug-config="$DebugConfigFile" "${BaseCommand[@]:1}" )
+	echo "Configuration dump into: '${DebugConfigFile}'" >> "$AbsoluteLogPath"
+	"${DumpCommand[@]}" > /dev/null
 	echo "================================================================================" >> "$AbsoluteLogPath"
 fi
 

@@ -27,6 +27,8 @@ function help() {
 	    or the directory with a 'srcs' subdirectory holding the repositories
 	--list , -l
 	    prints all the repositories in their order
+	--noerror
+	    in case of error, still returns the current directory
 	--verbose
 	    prints somehow more output
 	--version
@@ -87,6 +89,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--version' | '-V' ) DoVersion=1  ;;
 			( '--verbose' | '-v' ) VERBOSE=1  ;;
 			
+			( '--noerror' ) NoError=1 ;;
 			( '--basedir='* ) BaseDir="${Param#-*=}" ;;
 			( '--list' | '-l' ) DoList=1 ;;
 			
@@ -201,6 +204,8 @@ elif [[ "$iDestRepo" -ge $NRepositories ]]; then
 	iDestRepo=$(($NRepositories-1))
 fi
 
-echo "${BaseDir:+${BaseDir%/}/}${Repositories[iDestRepo]}"
+if [[ $ExitCode == 0 ]] || isFlagSet NoError ; then
+	echo "${BaseDir:+${BaseDir%/}/}${Repositories[iDestRepo]}"
+fi
 
 exit $ExitCode
