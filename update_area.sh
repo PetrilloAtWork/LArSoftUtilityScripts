@@ -77,11 +77,23 @@ function IsInList() {
 function SortUPSqualifiers() {
 	# Usage:  SortUPSqualifiers  Qualifiers [Separator]
 	# sorts the specified qualifiers (colon separated by default)
+	# The current sorting is: alphabetically, but move debug/opt/prof to the end
 	local qual="$1"
 	local sep="${2:-":"}"
 	local item
 	local -i nItems=0
+	local -ar AllSpecials=( 'prof' 'opt' 'debug' )
+	local -a Specials
 	for item in $(tr "$sep" '\n' <<< "$qual" | sort) ; do
+		if isInList "$item" "${AllSpecials[@]}" ; then
+			Specials=( "${Specials[@]}" "$item" )
+			continue
+		fi
+		[[ "$((nItems++))" == 0 ]] || echo -n "$sep"
+		echo -n "$item"
+	done
+	# add the special qualifiers at the end, in the original relative order
+	for item in "${Specials[@]}" ; do
 		[[ "$((nItems++))" == 0 ]] || echo -n "$sep"
 		echo -n "$item"
 	done

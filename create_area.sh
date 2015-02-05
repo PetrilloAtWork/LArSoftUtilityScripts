@@ -7,14 +7,39 @@
 declare local_create_area_DefaultVersion="${LARCORE_VERSION:-"nightly"}"
 declare local_create_area_DefaultQual="${MRB_QUAL:-"debug:e5"}"
 
+function isInList() {
+	# isInList Key ListItem [...]
+	
+	local Key="$1"
+	shift
+	local Item
+	for Item in "$@" ; do
+		[[ "$Key" == "$Item" ]] && return 0
+	done
+	return 1
+} # isInList()
+
+
 function SortUPSqualifiers() {
 	# Usage:  SortUPSqualifiers  Qualifiers [Separator]
 	# sorts the specified qualifiers (colon separated by default)
+	# The current sorting is: alphabetically, but move debug/opt/prof to the end
 	local qual="$1"
 	local sep="${2:-":"}"
 	local item
 	local -i nItems=0
+	local -ar AllSpecials=( 'prof' 'opt' 'debug' )
+	local -a Specials
 	for item in $(tr "$sep" '\n' <<< "$qual" | sort) ; do
+		if isInList "$item" "${AllSpecials[@]}" ; then
+			Specials=( "${Specials[@]}" "$item" )
+			continue
+		fi
+		[[ "$((nItems++))" == 0 ]] || echo -n "$sep"
+		echo -n "$item"
+	done
+	# add the special qualifiers at the end, in the original relative order
+	for item in "${Specials[@]}" ; do
 		[[ "$((nItems++))" == 0 ]] || echo -n "$sep"
 		echo -n "$item"
 	done
@@ -92,7 +117,7 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
 esac
 
 local_create_area_setup_qual="$(SortUPSqualifiers "${local_create_area_setup_qual//_/:}")"
-unset -f SortUPSqualifiers
+unset -f SortUPSqualifiers IsInList
 
 if [[ "$BASH_SOURCE" == "$0" ]]; then
 	cat <<-EOM

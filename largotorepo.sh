@@ -45,6 +45,11 @@ function isFlagSet() {
 	[[ -n "${!VarName//0}" ]]
 } # isFlagSet()
 
+function isFlagUnset() {
+	local VarName="$1"
+	[[ -z "${!VarName//0}" ]]
+} # isFlagUnset()
+
 function STDERR() { echo "$*" >&2 ; }
 function ERROR() { STDERR "ERROR: $@" ; }
 function FATAL() {
@@ -66,6 +71,95 @@ function isInteger() {
 	local Value="$1"
 	[[ "$Value" =~ ^[+-]*[0-9]+$ ]]
 } # isInteger()
+
+
+###############################################################################
+
+function StepRepository() {
+	# Usage:  StepRepository  BaseDir [Step]
+	# Detects which is the current repository (in the current working directory)
+	# and prints the next repository by Step steps (can be negative, default: 0)
+	local BaseDir="$1"
+	local Step="$2"
+	declare -i ExitCode=0
+	
+	# and where are we?
+	CurrentRepoPath="${CWD#$BaseDir}"
+	if [[ "$CurrentRepoPath" != "$CWD" ]]; then
+		CurrentRepoPath="${CurrentRepoPath##/}"
+		# this is the alleged repository name
+		CurrentRepo="${CurrentRepoPath%%/*}"
+		# which repository is that?
+		for (( iCurrentRepo = 0; iCurrentRepo < NRepositories ; ++iCurrentRepo )); do
+			[[ "${Repositories[iCurrentRepo]}" == "$CurrentRepo" ]] && break
+		done
+		if [[ "$iCurrentRepo" == "$NRepositories" ]]; then # none of them!
+			iCurrentRepo=''
+			CurrentRepo=''
+		fi
+	else
+		iCurrentRepo=''
+		CurrentRepo=''
+	fi
+	
+	declare -i DestRepo
+	if [[ -z "$CurrentRepo" ]]; then
+		STDERR "I can't understand in which repository I am now."
+		ExitCode=1
+		if [[ -z "$Step" ]]; then
+			iDestRepo=0
+		elif [[ $Step -ge 0 ]]; then
+			iDestRepo="$Step"
+		else
+			iDestRepo="$(($NRepositories + $Step))"
+		fi
+	else
+		[[ -z "$Step" ]] && Step=1
+		iDestRepo=$((iCurrentRepo + Step))
+	fi
+	
+	if [[ "$iDestRepo" -lt 0 ]]; then
+		ERROR "We can't go before the first repository ('${Repositories[0]}')"
+		ExitCode=1
+		iDestRepo=0
+	elif [[ "$iDestRepo" -ge $NRepositories ]]; then
+		ERROR "We can't go past the last repository ('${Repositories[$NRepositories-1]}')"
+		ExitCode=1
+		iDestRepo=$(($NRepositories-1))
+	fi
+
+	if [[ $ExitCode == 0 ]] || isFlagSet NoError ; then
+		echo "${Repositories[iDestRepo]}"
+	fi
+	return $ExitCode
+} # StepRepository()
+
+
+function FindRepository() {
+	# Usage:  FindRepository  BaseDir RepoNameHint
+	local BaseDir="$1"
+	local RepoNameHint="$2"
+	local -a RepoMatches
+	local RepoName
+	for RepoName in "${Repositories[@]}" ; do
+		[[ "$RepoName" =~ $RepoNameHint ]] || continue
+		RepoMatches=( "${RepoMatches[@]}" "$RepoName" )
+	done
+	
+	local -i NMatches="${#RepoMatches[@]}" 
+	if [[ $NMatches -gt 1 ]] && isFlagUnset NoError ; then
+		ERROR "${NMatches} matching repositories found: ${RepoMatches[@]}"
+		return 1
+	elif [[ $NMatches == 0 ]] && isFlagUnset NoError ; then
+		ERROR "No repository matching: '${RepoNameHint}'"
+		return 1
+	else
+		echo "${RepoMatches[0]}"
+	fi
+	
+#	FATAL 1 "Repository by name not implemented yet"
+	return 0
+} # FindRepository()
 
 
 ################################################################################
@@ -149,63 +243,25 @@ if isFlagSet DoList ; then
 	exit
 fi
 
-
-declare -i Step
-if [[ -n "${Arguments[0]}" ]]; then
-	isInteger "${Arguments[0]}" || FATAL 1 "'${Arguments[0]}' does not seem to be an acceptable integral number"
-	Step="${Arguments[0]}"
-fi
-
-
+declare DestRepo
 declare -i ExitCode=0
-
-# and where are we?
-CurrentRepoPath="${CWD#$BaseDir}"
-if [[ "$CurrentRepoPath" != "$CWD" ]]; then
-	CurrentRepoPath="${CurrentRepoPath##/}"
-	# this is the alleged repository name
-	CurrentRepo="${CurrentRepoPath%%/*}"
-	# which repository is that?
-	for (( iCurrentRepo = 0; iCurrentRepo < NRepositories ; ++iCurrentRepo )); do
-		[[ "${Repositories[iCurrentRepo]}" == "$CurrentRepo" ]] && break
-	done
-	if [[ "$iCurrentRepo" == "$NRepositories" ]]; then # none of them!
-		iCurrentRepo=''
-		CurrentRepo=''
-	fi
-else
-	iCurrentRepo=''
-	CurrentRepo=''
-fi
-
-declare -i DestRepo
-if [[ -z "$CurrentRepo" ]]; then
-	STDERR "I can't understand in which repository I am now."
-	ExitCode=1
-	if [[ -z "$Step" ]]; then
-		iDestRepo=0
-	elif [[ $Step -ge 0 ]]; then
-		iDestRepo="$Step"
+if [[ -n "${Arguments[0]}" ]]; then
+	if isInteger "${Arguments[0]}" ; then
+		DestRepo="$(StepRepository "$BaseDir" "${Arguments[0]}" )"
+		ExitCode=$?
 	else
-		iDestRepo="$(($NRepositories + $Step))"
+		DestRepo="$(FindRepository "$BaseDir" "${Arguments[0]}" )"
+		ExitCode=$?
 	fi
 else
-	[[ -z "$Step" ]] && Step=1
-	iDestRepo=$((iCurrentRepo + Step))
+	DestRepo="$(StepRepository "$BaseDir" )"
+	ExitCode=$?
 fi
 
-if [[ "$iDestRepo" -lt 0 ]]; then
-	ERROR "We can't go before the first repository ('${Repositories[0]}')"
-	ExitCode=1
-	iDestRepo=0
-elif [[ "$iDestRepo" -ge $NRepositories ]]; then
-	ERROR "We can't go past the last repository ('${Repositories[$NRepositories-1]}')"
-	ExitCode=1
-	iDestRepo=$(($NRepositories-1))
-fi
 
 if [[ $ExitCode == 0 ]] || isFlagSet NoError ; then
-	echo "${BaseDir:+${BaseDir%/}/}${Repositories[iDestRepo]}"
+	echo "${BaseDir:+${BaseDir%/}/}${DestRepo}"
 fi
 
 exit $ExitCode
+
