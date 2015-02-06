@@ -10,33 +10,50 @@ SCRIPTDIR="$(dirname "$0")"
 
 function hasGitBranch() {
 	local Package="$1"
-	shift 1
-	local -a Branches=( "$@" )
+	shift
+	local -a BranchPatterns=( "$@" )
 	
-	git branch -a | while read -a Items ; do
+	local -a Items
+	local -i NBranches=0
+	while read -a Items ; do
 		Branch="${Items[0]}"
-		[[ "$Branch" == '*' ]] && Branch="${Items[1]}"
 		
-		Remote=0
+		local -i Current=0
+		local -i Remote=0
+		
+		# detect if current; if so, fix the branch name
+		if [[ "$Branch" == '*' ]]; then
+			Branch="${Items[1]}"
+			Current=1 # we don't use this information so far
+		fi
+		
+		# detect if remote; if so, change the branch name
 		if [[ "${Branch#remotes/}" != "$Branch" ]]; then
 			Branch="${Branch#remotes/}"
 			Remote=1
 		fi
 		
-		for TargetBranch in "${Branches[@]}" ; do
-			[[ "$Branch" == "$TargetBranch" ]] || continue
-			if isFlagSet Remote ; then
-				echo "  ${TargetBranch} (remote)"
-			else
-				echo "  ${TargetBranch}"
+		for Pattern in "${BranchPatterns[@]}" ; do
+			[[ "$Branch" =~ $Pattern ]] || continue
+			if [[ $NBranches == 0 ]]; then
+				echo "${Package}:"
 			fi
+			if isFlagSet Remote ; then
+				echo "  ${Branch} (remote)"
+			else
+				echo "  ${Branch}"
+			fi
+			let ++NBranches
+			break
 		done
 		
-	done
+	done < <(git branch -a)
 	return 0
 } # hasGitBranch()
 
 export -f hasGitBranch
-"${SCRIPTDIR}/larcommands.sh" ${FAKE:+--dry-run} --tag="PACKAGENAME" -- hasGitBranch '%PACKAGENAME%' "$@"
+"${SCRIPTDIR}/larcommands.sh" ${FAKE:+--dry-run} --quiet --tag="PACKAGENAME" -- hasGitBranch '%PACKAGENAME%' "$@"
 
-exit 0
+
+
+

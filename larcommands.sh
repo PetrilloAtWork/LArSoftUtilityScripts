@@ -201,25 +201,26 @@ for Dir in "$SRCDIR"/* ; do
 	
 	case "$CompactMode" in
 		( 'quiet' )
-			echo -n "$Output"
+			[[ -n "$Output" ]] && echo "$Output"
 			;;
 		( 'prepend'* )
 			Header="$(PrepareHeader "${CompactMode#prepend}" "[${PackageName}]")"
 			echo -n "${Header} ${Output}"
 			[[ $res != 0 ]] && echo -n " (exit code: ${res})"
+			echo
 			;;
 		( 'append'* )
 			Header="$(PrepareHeader "${CompactMode#append}" "[${PackageName}]")"
 			echo -n "${Output} ${Header}"
 			[[ $res != 0 ]] && echo -n " (exit code: ${res})"
+			echo
 			;;
 		( * )
 			echo -n "${PackageName}: ${PackageCommand[@]}"
 			[[ $res != 0 ]] && echo -n " [exit code: ${res}]"
 			echo
-			echo -n "$Output"
+			[[ -n "$Output" ]] && echo "$Output"
 	esac
-	echo
 	
 	isFlagSet StopOnError && [[ $res != 0 ]] && exit "$res"
 	
