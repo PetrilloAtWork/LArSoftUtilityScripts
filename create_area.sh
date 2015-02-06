@@ -7,8 +7,8 @@
 declare local_create_area_DefaultVersion="${LARCORE_VERSION:-"nightly"}"
 declare local_create_area_DefaultQual="${MRB_QUAL:-"debug:e5"}"
 
-function isInList() {
-	# isInList Key ListItem [...]
+function IsInList() {
+	# IsInList Key ListItem [...]
 	
 	local Key="$1"
 	shift
@@ -17,7 +17,7 @@ function isInList() {
 		[[ "$Key" == "$Item" ]] && return 0
 	done
 	return 1
-} # isInList()
+} # IsInList()
 
 
 function SortUPSqualifiers() {
@@ -31,7 +31,7 @@ function SortUPSqualifiers() {
 	local -ar AllSpecials=( 'prof' 'opt' 'debug' )
 	local -a Specials
 	for item in $(tr "$sep" '\n' <<< "$qual" | sort) ; do
-		if isInList "$item" "${AllSpecials[@]}" ; then
+		if IsInList "$item" "${AllSpecials[@]}" ; then
 			Specials=( "${Specials[@]}" "$item" )
 			continue
 		fi

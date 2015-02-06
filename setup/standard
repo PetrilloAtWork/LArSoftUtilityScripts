@@ -28,7 +28,7 @@ function SortUPSqualifiers() {
 	local -ar AllSpecials=( 'prof' 'opt' 'debug' )
 	local -a Specials
 	for item in $(tr "$sep" '\n' <<< "$qual" | sort) ; do
-		if isInList "$item" "${AllSpecials[@]}" ; then
+		if IsInList "$item" "${AllSpecials[@]}" ; then
 			Specials=( "${Specials[@]}" "$item" )
 			continue
 		fi
