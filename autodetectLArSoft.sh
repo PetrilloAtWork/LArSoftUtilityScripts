@@ -100,6 +100,18 @@ function FATAL() {
 	exit $Code
 } # FATAL()
 
+function isDebugging() {
+	local -i Level="${1:-1}"
+	[[ -n "$DEBUG" ]] && [[ "$DEBUG" -ge "$Level" ]]
+} # isDebugging()
+
+function DBGN() {
+	local -i Level="$1"
+	shift
+	isDebugging "$Level" && STDERR "DBG[${Level}]| $*"
+} # DBGN()
+function DBG() { DBGN 1 "$@" ; }
+
 
 function ParseLocalProductsDir() {
 	local LPDir="$1"
@@ -117,6 +129,7 @@ function ParseLocalProductsDir() {
 	[[ "${VersionQuals[0]}" == "localProducts" ]] || return 1
 	
 	[[ -n "$MRB_PROJECT" ]] && [[ "$MRB_PROJECT" != "${VersionQuals[1]}" ]] && return 1
+	local Project="${VersionQuals[1]}"
 	
 	local Version Quals
 	case "${VersionQuals[2]}" in
@@ -132,26 +145,63 @@ function ParseLocalProductsDir() {
 	esac
 	local Quals="${LPDir#"localProducts_${VersionQuals[1]}_${Version}"}"
 	Quals="${Quals#_}"
+	DBGN 2 "  information from setup script '${SetupFile}': project '${Project}' version '${Version}' qualifiers '${Quals}'"
 	echo "$Version"
 	echo "$Quals"
 	return 0
 } # ParseLocalProductsDir()
+
+function ParseLocalSetup() {
+	local SetupFile="$1"
+	[[ -r "$SetupFile" ]] || return 2
+	
+	local Project Version Quals
+	
+	local -a Line
+	while read -a Line ; do
+		[[ "${Line[0]}" == 'setenv' ]] || continue
+		local Value="${Line[2]//\"}"
+		case "${Line[1]}" in
+			( 'MRB_PROJECT' )         Project="$Value" ;;
+			( 'MRB_PROJECT_VERSION' ) Version="$Value" ;;
+			( 'MRB_QUALS' )           Quals="$Value" ;;
+		esac
+	done < "$SetupFile"
+	
+	DBGN 2 "  information from setup script '${SetupFile}': project '${Project}' version '${Version}' qualifiers '${Quals}'"
+	if [[ -z "$Project" ]] || [[ -z "$Version" ]] || [[ -z "$Quals" ]]; then
+		DBGN 2 "    => information from setup script is not enough!"
+		return 1
+	fi
+	echo "$Version"
+	echo "$Quals"
+	return 0
+} # ParseLocalSetup()
 
 function FindLocalProductsDir() {
 	local BaseDir="${MRB_TOP:-"."}"
 	[[ -d "$BaseDir" ]] || return 1
 	for Pattern in "localProducts_${MRB_PROJECT}_" "localProducts_" "localProducts" "localProd" ; do
 		local LocalProductsDir
-		ls -drv "$Pattern"* 2> /dev/null | while read LocalProductsDir ; do
-			[[ -r "${LocalProductsDir}/setup" ]] || continue
+		while read LocalProductsDir ; do
+			DBGN 2 "  testing directory '${LocalProductsDir}'"
+			local SetupFile="${LocalProductsDir}/setup"
+			[[ -r "$SetupFile" ]] || continue
 			
-			VersionQuals="$(ParseLocalProductsDir "$LocalProductsDir")"
-			[[ $? == 0 ]] || continue
+			local res=0
+			VersionQuals="$(ParseLocalSetup "$SetupFile")"
+			res=$?
+			if [[ $res != 0 ]]; then
+				VersionQuals="$(ParseLocalProductsDir "$LocalProductsDir")"
+				res=$?
+			fi
 			
+			[[ $res == 0 ]] || continue
+			
+			DBGN 2 "Local product directory is valid: '${LocalProductsDir}'"
 			echo "$LocalProductsDir"
-			exit 42
-		done
-		[[ $? == 42 ]] && return 0
+			return 0
+		done < <( ls -drv "$Pattern"* 2> /dev/null )
 	done
 	return 1
 } # FindLocalProductsDir()
@@ -161,6 +211,7 @@ function ExtractLocalProductsDirParams() {
 	LocalProductsDir="$(FindLocalProductsDir)"
 	local res=$?
 	[[ $res != 0 ]] && return $res
+	ParseLocalSetup "${LocalProductsDir}/setup" && return 0
 	ParseLocalProductsDir "$LocalProductsDir"
 } # ExtractLocalProductsDirParams()
 
@@ -280,6 +331,8 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--format' | '-f' )     let ++iParam; Format="${!iParam}" ;;
 			
 			### other stuff
+			( '--debug' )             DEBUG=1 ;;
+			( '--debug='* )           DEBUG="${Param#--debug=}" ;;
 			( '-' | '--' )
 				NoMoreOptions=1
 				;;
@@ -312,13 +365,14 @@ declare LArSoftQualifiers=""
 declare Experiment=""
 
 declare SetupDir="$(dirname "$0")"
-[[ "$SetupDir" != '/' ]] && SetupDir="$(pwd)/${SetupDir}"
-
+[[ "${SetupDir:0:2}" == './' ]] && SetupDir="$(pwd)/${SetupDir:2}"
+DBGN 2 "Setup directory: '${SetupDir}'"
 
 ###
 ### parse the current path, looking for experiment, LArSoft version and qualifiers
 ###
 for LocalDir in "$(pwd)" "$SetupDir" ; do
+	DBGN 1 "Extracting information from path: '${LocalDir}'"
 	declare ExperimentTry=""
 	declare LArSoftVersionTry=""
 	declare LArSoftQualifiersTry=""
@@ -326,16 +380,20 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 		declare DirName="$(basename "$LocalDir")"
 		declare DirRealName="$(basename "$(readlink "$LocalDir")")"
 		
+		DBGN 2 "  '${DirName}'${DirRealName:+" ( => '${DirRealName}'")}..."
+		
 		# experiment?
 		if [[ -z "$ExperimentTry" ]]; then
 			for TestName in "$DirName" "$DirRealName" ; do
-				case "$(tr '[:lower:]' '[:upper:]' <<< "$TestName")" in
+				case "${TestName^^}" in
 					( 'LBNE' )
 						ExperimentTry='LBNE'
+						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
 						continue 2
 						;;
 					( 'UBOONE' | 'MICROBOONE' )
 						ExperimentTry='MicroBooNE'
+						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
 						continue 2
 						;;
 				esac
@@ -349,12 +407,14 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 				case "$TestName" in
 					( 'develop' | 'master' | 'nightly' )
 						LArSoftVersionTry="$TestName"
+						DBGN 1 "  => LArSoft version might be: '${LArSoftVersionTry}'"
 						continue 2
 						;;
 				esac
 				# version pattern
 				if [[ "$TestName" =~ v[[:digit:]]+_[[:digit:]]+(_[[:digit:]]+)?$ ]]; then
 					LArSoftVersionTry="$TestName"
+					DBGN 1 "  => LArSoft version might be: '${LArSoftVersionTry}' (matches pattern)"
 					continue 2
 				fi
 			done
@@ -365,6 +425,7 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 			for TestName in "$DirName" "$DirRealName" ; do
 				if tr ':_' '\n' <<< "$TestName" | grep -q -w -e 'debug' -e 'prof' -e 'opt' ; then
 					LArSoftQualifiersTry="${TestName//_/:}"
+					DBGN 1 "  => qualifiers might be: '${LArSoftQualifiersTry}' (matches pattern)"
 					continue 2
 				fi
 			done
@@ -395,19 +456,21 @@ if [[ -z "$Experiment" ]]; then
 	else
 		Experiment="LArSoft"
 	fi
+	DBGN 1 "Experiment forcibly set to: '${Experiment}'"
 fi
 
 LocalProductsDirInfo=( $(ExtractLocalProductsDirParams "$MRB_TOP" ) )
 if [[ $? == 0 ]]; then
 	LArSoftVersion="${LocalProductsDirInfo[0]}"
 	LArSoftQualifiers="${LocalProductsDirInfo[1]}"
+	DBGN 1 "Information from local product directory: version '${LArSoftVersion}' qualifiers '${LArSoftQualifiers}'"
 fi
 
 : ${LArSoftVersion:="$DefaultLArSoftVersion"}
 : ${LArSoftQualifiers:="$DefaultLArSoftQualifiers"}
 : ${Experiment:="$DefaultExperiment"}
 
-case "$(tr '[:upper:]' '[:lower:]' <<< "$Experiment")" in
+case "${Experiment,,}" in
 	( 'auto' | 'autodetect' | '' )
 		;;
 	( 'lbne' )
@@ -438,3 +501,4 @@ Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${PackageVersionFormat}/\1${LeadingPacka
 Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${LeadingPackageFormat}/\1${LeadingPackage}/g" <<< "$Output")"
 Output="$(sed -e "s/${ItemTag}${ItemTag}/${ItemTag}/g" <<< "$Output")"
 printf "$Output"
+
