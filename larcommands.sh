@@ -2,9 +2,16 @@
 #
 # Distributes a command to all the GIT repositories.
 #
+# Changes:
+# 20150304 (petrillo@fnal.gov) [v1.1]
+#   started tracking versions;
+#   added --version, --ifhasbranch, --ifcurrentbranch options
+#
 
 SCRIPTNAME="$(basename "$0")"
 SCRIPTDIR="$(dirname "$0")"
+SCRIPTVERSION="1.1"
+
 : ${BASEDIR:="$(dirname "$(readlink -f "$SCRIPTDIR")")"}
 
 : ${PACKAGENAMETAG:="%PACKAGENAME%"}
@@ -30,6 +37,13 @@ function help() {
 	    add a tag to the list of tags
 	--git
 	    adds "git" as command if it's not the first word of the command already
+	--ifcurrentbranch=BRANCHNAME
+	    acts only on repositories whose current branch is BRANCHNAME; it can be
+	    specified more than once, in which case the operation will be performed
+	    if the current branch is any one of the chosen branches
+	--ifhasbranch=BRANCHNAME
+	    similar to '--ifcurrentbranch' above, performs the action only if the
+	    repository has one of the specified branches
 	--compact[=MODE]
 	    do not write the git command; out the output of the command according to
 	    MODE:
@@ -42,11 +56,22 @@ function help() {
 	--stop-on-error , -S
 	    the execution is interrupted when a command fails (exit code non-zero);
 	    the exit code is the one of the failure
+	--debug[=LEVEL]
+	    increase verbosity level
+	--version , -V
+	    prints the version of this script and exits
 	--help , -h , -?
 	    prints this help message
 	
 	EOH
 } # help()
+
+
+function PrintVersion() {
+	local RealName="$(basename "$(readlink "$0")")"
+	[[ "$RealName" == "$SCRIPTNAME" ]] && RealName=''
+	echo "${SCRIPTNAME} v. ${SCRIPTVERSION}${RealName:+" (based on ${RealName})"}"
+} # PrintVersion()
 
 
 function isFlagSet() { local VarName="$1" ; [[ -n "${!VarName//0}" ]]; }
@@ -58,6 +83,48 @@ function FATAL() {
 	STDERR "FATAL ERROR (${Code}): $*"
 	exit $Code
 } # FATAL()
+
+function isDebugging() {
+	local -i Level="${1:-1}"
+	[[ -n "$DEBUG" ]] && [[ "$DEBUG" -ge $Level ]]
+} # isDebugging()
+
+function DBGN() {
+	local -i Level="$1"
+	shift
+	isDebugging "$Level" && STDERR "DBG[${Level}]| $*"
+} # DBGN()
+function DBG() { DBGN 1 "$@" ; }
+
+
+function anyInList() {
+	# Usage:  anyInList  Sep Key [Key...] Sep [List Items...]
+	
+	DBGN 4 "${FUNCNAME[0]} ${@}"
+	
+	# build the list of keys
+	local Sep="$1"
+	shift
+	local -a Keys
+	while [[ $# -gt 0 ]] && [[ "$1" != "$Sep" ]]; do
+		Keys=( "${Keys[@]}" "$1" )
+		shift
+	done
+	shift # the first argument was a separator
+	
+	DBGN 4 "Looking in ${@} for any of keys ${Keys[@]}"
+	
+	# now to the matching double-loop
+	local Item Key
+	for Item in "$@" ; do
+		for Key in "${Keys[@]}" ; do
+			[[ "$Item" == "$Key" ]] || continue
+			DBGN 3 "Key '${Key}' found in list"
+			return 0
+		done
+	done
+	return 1
+} # anyInList()
 
 
 function ReplaceItem() {
@@ -99,12 +166,74 @@ function PrepareHeader() {
 	esac
 } # PrepareHeader()
 
+
+function GetCurrentBranch() {
+	# Usage:  GetCurrentBranch  [RepoDir]
+	local RepoDir="$1"
+	
+	if [[ -n "$RepoDir" ]]; then
+		pushd "$RepoDir" > /dev/null || return $?
+	fi
+	
+	# get the short reference for current HEAD on screen;
+	# that is, the current branch
+	git rev-parse --abbrev-ref HEAD
+	
+	[[ -n "$RepoDir" ]] && popd > /dev/null
+	return 0
+} # GetCurrentBranch()
+
+
+function GetLocalBranches() {
+	# Usage:  GetLocalBranches  [RepoDir]
+	local RepoDir="$1"
+	
+	if [[ -n "$RepoDir" ]]; then
+		pushd "$RepoDir" > /dev/null || return $?
+	fi
+	
+	# get the short reference for current HEAD on screen;
+	# that is, the current branch
+	git for-each-ref --format='%(refname:short)' refs/heads/
+	
+	[[ -n "$RepoDir" ]] && popd > /dev/null
+	return 0
+} # GetLocalBranches()
+
+
+function isGoodRepo() {
+	local Dir="$1"
+	[[ -d "$Dir" ]] || return 1
+	[[ -d "${Dir}/.git" ]] || return 1
+	
+	local RepoName="$(basename "$Dir")"
+	
+	if [[ "${#OnlyIfCurrentBranches[@]}" -gt 0 ]]; then
+		local CurrentBranch="$(GetCurrentBranch "$Dir")"
+		DBGN 2 "Current branch of ${RepoName}: '${CurrentBranch}'"
+		
+		anyInList -- "${OnlyIfCurrentBranches[@]}" -- "$CurrentBranch" || return 1
+	fi
+	
+	if [[ "${#OnlyIfHasBranches[@]}" -gt 0 ]]; then
+		local -a AllBranches=( $(GetLocalBranches "$Dir") )
+		DBGN 2 "${#AllBranches[@]} local branches of ${RepoName}: ${AllBranches[@]}"
+		
+		anyInList -- "${OnlyIfHasBranches[@]}" -- "${AllBranches[@]}" || return 1
+	fi
+	
+	return 0
+} # isGoodRepo()
+
+
 ################################################################################
 ### parameters parser
 ### 
 declare CompactMode='normal'
 declare -i NoMoreOptions=0
 declare -a Command
+declare -a OnlyIfCurrentBranches
+declare -a OnlyIfHasBranches
 for ((iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
 	if isFlagSet NoMoreOptions || [[ "${Param:0:1}" != '-' ]]; then
@@ -121,6 +250,12 @@ for ((iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( "--git" )
 				AddGit=1
 				;;
+			( '--ifcurrentbranch='* )
+				OnlyIfCurrentBranches=( "${OnlyIfCurrentBranches[@]}" "${Param#--*=}" )
+				;;
+			( '--ifhasbranch='* )
+				OnlyIfHasBranches=( "${OnlyIfHasBranches[@]}" "${Param#--*=}" )
+				;;
 			( "--compact="* )
 				CompactMode="${Param#--compact=}"
 				;;
@@ -134,6 +269,15 @@ for ((iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--stop-on-error' | '-S' )
 				StopOnError=1
 				;;
+			( '--debug='* )
+				DEBUG="${Param#--*=}"
+				;;
+			( '--debug' | '-d' )
+				DEBUG=1
+				;;
+			( '--version' | '-V' )
+				DoVersion=1
+				;;
 			( '--help' | '-?' | '-h' )
 				DoHelp=1
 				;;
@@ -145,6 +289,11 @@ for ((iParam = 1 ; iParam <= $# ; ++iParam )); do
 		esac
 	fi
 done
+
+if isFlagSet DoVersion ; then
+	PrintVersion
+	exit
+fi
 
 if isFlagSet DoHelp ; then
 	help
@@ -173,10 +322,12 @@ fi
 
 [[ "${Command[0]}" != "git" ]] && isFlagSet AddGit && Command=( 'git' "${Command[@]}" )
 
+DBG  "Command: ${Command[@]}"
+
 declare -i nErrors=0
 for Dir in "$SRCDIR"/* ; do
-	[[ -d "$Dir" ]] || continue
-	[[ -d "${Dir}/.git" ]] || continue
+	
+	isGoodRepo "$Dir" || continue
 	
 	PackageName="$(basename "$Dir")"
 	
