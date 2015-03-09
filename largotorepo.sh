@@ -9,7 +9,7 @@
 
 ################################################################################
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.0"
+SCRIPTVERSION="1.1"
 CWD="$(pwd)"
 
 function help() {
@@ -31,6 +31,8 @@ function help() {
 	    in case of error, still returns the current directory
 	--verbose
 	    prints somehow more output
+	--debug[=LEVEL]
+	    enable debug messages
 	--version
 	    prints the script version and exits
 	--help , -h , -?
@@ -63,6 +65,19 @@ function LASTFATAL() {
 	[[ "$Code" != 0 ]] && FATAL "$Code""$@"
 } # LASTFATAL()
 
+function isDebugging() {
+	local -i Level="${1:-1}"
+	[[ -n "$DEBUG" ]] && [[ "$DEBUG" -ge "$Level" ]]
+} # isDebugging()
+function DBGN() {
+	local -i Level="$1"
+	shift
+	isDebugging "$Level" && STDERR "DBG[${Level}]| $*"
+} # DBGN()
+function DBG() { DBGN 1 "$*" ; }
+
+alias rl="readlink -f"
+
 
 function StringLength() { echo "${#1}" ; }
 
@@ -75,29 +90,84 @@ function isInteger() {
 
 ###############################################################################
 
+function hasDir() {
+	local TestDir="$1"
+	local KeyDir="$2"
+	local Dir="${TestDir:+"${TestDir%/}/"}${KeyDir}"
+	DBGN 3 "     (is there a '${Dir}' directory?)"
+	[[ -d "$Dir" ]]
+} # hasDir()
+
+function isUPSpackage() {
+	local TestDir="${1:+"${1%/}/"}"
+	DBGN 2 "   test if '${TestDir}' is a UPS package"
+	ls "${TestDir}/"*.version >& /dev/null
+} # isUPSpackage()
+
+function isCMakeBuildDir() {
+	local TestDir="$1"
+	DBGN 2 "   test if '${TestDir}' is a CMake build directory"
+	hasDir "$TestDir" 'CMakeFiles'
+} # isCMakeBuildDir()
+
+function isGITrepository() {
+	local TestDir="$1"
+	DBGN 2 "   test if '${TestDir}' is a GIT repository"
+	hasDir "$TestDir" '.git'
+} # isGITrepository()
+
+function DetectLocation() {
+	# Prints the MRB location where we are
+	local Cwd="$(readlink -f "$(pwd)")"
+	
+	local Mode
+	for Mode in 'SOURCE' 'BUILDDIR' 'INSTALL' 'TOP' ; do
+		local MRBVarName="MRB_${Mode}"
+		local MRBPath="$(readlink -f "${!MRBVarName}")"
+		if [[ "$Cwd" == "$MRBPath" ]] || [[ "$Cwd" =~ ^${MRBPath}/ ]]; then
+			echo "$Mode"
+			return 0
+		fi
+	done
+	return 1
+} # DetectLocation()
+
+
 function StepRepository() {
 	# Usage:  StepRepository  BaseDir [Step]
 	# Detects which is the current repository (in the current working directory)
 	# and prints the next repository by Step steps (can be negative, default: 0)
 	local BaseDir="$1"
 	local Step="$2"
-	declare -i ExitCode=0
+	local -i ExitCode=0
 	
+	local -i iCurrentRepo
+	local CurrentRepo
 	# and where are we?
 	CurrentRepoPath="${CWD#$BaseDir}"
 	if [[ "$CurrentRepoPath" != "$CWD" ]]; then
 		CurrentRepoPath="${CurrentRepoPath##/}"
+		DBG "We are in '${CurrentRepoPath}' under '${BaseDir}'"
 		# this is the alleged repository name
 		CurrentRepo="${CurrentRepoPath%%/*}"
-		# which repository is that?
-		for (( iCurrentRepo = 0; iCurrentRepo < NRepositories ; ++iCurrentRepo )); do
-			[[ "${Repositories[iCurrentRepo]}" == "$CurrentRepo" ]] && break
-		done
-		if [[ "$iCurrentRepo" == "$NRepositories" ]]; then # none of them!
-			iCurrentRepo=''
-			CurrentRepo=''
+		if [[ -z "$CurrentRepo" ]]; then
+			# this means we are exactly in the base directory
+			DBG "We are in the base directory '${BaseDir}'"
+		else
+			# which repository is that?
+			for (( iCurrentRepo = 0; iCurrentRepo < NRepositories ; ++iCurrentRepo )); do
+				[[ "${Repositories[iCurrentRepo]}" == "$CurrentRepo" ]] && break
+			done
+			if [[ "$iCurrentRepo" == "$NRepositories" ]]; then # none of them!
+				iCurrentRepo=''
+				CurrentRepo=''
+				DBG "No repository matching '${CurrentRepo}'."
+			else
+				DBG "Repository #${iCurrentRepo} ('${CurrentRepo}') matched."
+			fi
 		fi
 	else
+		DBG "Current directory '${CWD}' not matching the base dir '${BaseDir}'"
 		iCurrentRepo=''
 		CurrentRepo=''
 	fi
@@ -109,7 +179,7 @@ function StepRepository() {
 		if [[ -z "$Step" ]]; then
 			iDestRepo=0
 		elif [[ $Step -ge 0 ]]; then
-			iDestRepo="$Step"
+			iDestRepo="$((Step - 1))"
 		else
 			iDestRepo="$(($NRepositories + $Step))"
 		fi
@@ -127,7 +197,7 @@ function StepRepository() {
 		ExitCode=1
 		iDestRepo=$(($NRepositories-1))
 	fi
-
+	
 	if [[ $ExitCode == 0 ]] || isFlagSet NoError ; then
 		echo "${Repositories[iDestRepo]}"
 	fi
@@ -167,7 +237,6 @@ function FindRepository() {
 # default parameters
 declare -i VERBOSE=0
 declare -i DoList=0
-declare BaseDir="$MRB_SOURCE"
 
 ###
 ### parameters parsing
@@ -182,6 +251,8 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--help' | '-h' | '-?' ) DoHelp=1  ;;
 			( '--version' | '-V' ) DoVersion=1  ;;
 			( '--verbose' | '-v' ) VERBOSE=1  ;;
+			( '--debug' ) DEBUG=1 ;;
+			( '--debug='* ) DEBUG="${Param#--*=}" ;;
 			
 			( '--noerror' ) NoError=1 ;;
 			( '--basedir='* ) BaseDir="${Param#-*=}" ;;
@@ -214,23 +285,46 @@ if isFlagSet DoVersion ; then
 	exit 0
 fi
 
+declare Mode
+Mode="$(DetectLocation "$(pwd)")"
+LASTFATAL 1 "I can't detect in which area of MRB I am."
+if [[ "$Mode" == 'TOP' ]]; then
+	ERROR "We are in the main MRB working area. Jumping to source area."
+	cd "$MRB_SOURCE"
+	Mode='SOURCE'
+fi
+
+declare MRBVarName="MRB_${Mode}"
+declare BaseDir="${!MRBVarName}"
+[[ -d "$BaseDir" ]] || FATAL 3 "The detected base directory '${BaseDir}' for mode ${Mode} does not exist!"
+
+case "$Mode" in
+	( 'SOURCE' )
+		TestDirFunc='isGITrepository'
+		;;
+	( 'BUILDDIR' )
+		TestDirFunc='isCMakeBuildDir'
+		;;
+	( 'INSTALL' )
+		TestDirFunc='isUPSpackage'
+		;;
+	( * )
+		FATAL 1 "Internal error: unsupported mode '${Mode}'"
+esac
+
 
 # collect the GIT repositories in the base directory
 declare -a Repositories
 declare -i NRepositories=0
 for Dir in "${BaseDir:+${BaseDir%/}/}"* ; do
 	[[ -d "$Dir" ]] || continue
-	[[ -d "${Dir}/.git" ]] || continue
+	"$TestDirFunc" "$Dir" || continue
 	Repositories[NRepositories++]="$(basename "$Dir")"
 done
-if [[ "$NRepositories" == 0 ]] && [[ -d "${BaseDir}/srcs" ]]; then
-	BaseDir="${BaseDir:+${BaseDir%/}/}srcs"
-	for Dir in "${BaseDir:+${BaseDir}/}"* ; do
-		[[ -d "$Dir" ]] || continue
-		[[ -d "${Dir}/.git" ]] || continue
-		Repositories[NRepositories++]="$(basename "$Dir")"
-	done
-fi
+DBG "Found ${NRepositories} repositories: ${Repositories[@]}"
+[[ "$NRepositories" == 0 ]] && FATAL 2 "No repositories found in '${BaseDir}'"
+
+
 
 if isFlagSet DoList ; then
 	isFlagSet VERBOSE && echo "I've found ${NRepositories} repositories in '${BaseDir:-the current directory}':"

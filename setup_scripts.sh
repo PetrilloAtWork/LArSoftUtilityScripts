@@ -21,8 +21,14 @@ fi
 if [[ -x "${LARSCRIPTDIR}/largotorepo.sh" ]]; then
 	function gotorepo() {
 		local DirName
-		DirName="$("${LARSCRIPTDIR}/largotorepo.sh" "$@" )"
-		[[ "$?" == 0 ]] && cd "$DirName"
+		DirName="$("${LARSCRIPTDIR}/largotorepo.sh" --noerror "$@" )"
+		local -i res="$?"
+		if [[ -n "$DirName" ]]; then
+			[[ $res != 0 ]] && echo "  (jumping anyway)" >&2
+			cd "$DirName" && return $res
+		else
+			return $res
+		fi
 	}
 	function nextrepo() { gotorepo ${1:-+1} ; }
 	function prevrepo() { gotorepo -${1:-1} ; }
