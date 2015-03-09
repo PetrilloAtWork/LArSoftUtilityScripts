@@ -24,14 +24,15 @@ function help() {
 	Usage:  ${SCRIPTNAME} [options] [Version [Qualifiers]]
 	
 	If sourced, it will also source the local products setup.
+	If the version is not specified, it will be set as the highest among the
+	qualifying repositories in the source directory.
 	
 	Script options:
 	--force
 	    force the recreation of the local products area; the data there will be
 	    lost!!
-	--ignoreinconsistency
-	    if different local products have different versions, do not bail out
-	    (it will use the last of the versions of the larXxxx packages, if any)
+	--debug[=LEVEL], -d
+	    sets the verbosity level (0 is quietest; 1 if no level is specified)
 	--version , -V
 	    prints the script version
 	EOH
@@ -60,6 +61,35 @@ function LASTFATAL() {
 	local Code="$?"
 	[[ "$Code" != 0 ]] && FATAL "$Code" "$@"
 } # LASTFATAL()
+
+function isDebugging() {
+	local MsgLevel="${1:-1}"
+	[[ -n "$DEBUG" ]] && [[ "$DEBUG" -ge "$MagLevel" ]]
+} # isDebugging()
+function DBGN() {
+	local Level="$1"
+	shift
+	isDebugging "$Level" && STDERR "DBG[${Level}]| $*"
+} # DBGN()
+function DBG() { DBGN 1 "$@" ; }
+
+function DUMPVARN() {
+	local Level="$1"
+	shift
+	local VarName
+	local Output
+	for VarName in "$@" ; do
+		Output="${Output:+${Output} }${VarName}='${!VarName}'"
+	done
+	DBGN "$Level" "$Output"
+} # DUMPVARN()
+
+
+function isNumber() {
+	local Value="$1"
+	[[ -z "${Value//[0-9]}" ]]
+} # isNumber()
+
 
 function IsInList() {
 	# Usage:  IsInList Key [Item ...]
@@ -137,6 +167,141 @@ function PackageList() {
 } # PackageList()
 
 
+function SplitVersion() {
+	# assumes versions in the form v##_##_##tag_revision
+	# prints a sequence of lines with: major version, all other versions,
+	# a tag to the last version, and the rest of the revision
+	local Version="$1"
+	DBGN 2 "Splitting version string: '${Version}'"
+	local -a Tokens=( ${Version//_/ } )
+	local Item
+	local -i NTokens="${#Tokens[@]}"
+	DBGN 3 "  ${NTokens} tokens found"
+	local iToken=0
+	while [[ "$iToken" -lt "$NTokens" ]]; do
+		DBGN 3 "  Token[${iToken}]: '${Tokens[iToken]}' (version)"
+		# major version
+		echo "${Tokens[iToken]#v}"
+		let iToken++
+		
+		while [[ "$iToken" -lt "$NTokens" ]]; do
+			DBGN 3 "  Token[${iToken}]: '${Tokens[iToken]}'"
+			Token="${Tokens[iToken++]}"
+			[[ -n "$Token" ]] || continue
+			[[ "$Token" =~ ^[0-9]* ]]
+			local Match="${BASH_REMATCH[0]}"
+			local Rest="${Token#${Match}}"
+			if [[ -z "$Match" ]]; then
+				DBGN 4 "    not a number at all!"
+				# the previous version was really the last
+				# print an empty tag to it, and go on
+				echo ""
+				let --iToken
+				break
+			fi
+			echo "$Match"
+			if [[ -n "$Rest" ]]; then
+				DBGN 4 "    matching a version '${Match}' and a tag '${Rest}'"
+				echo "$Rest"
+				break
+			fi
+			DBGN 4 "    plain version number"
+		done
+		
+		# revision
+		[[ "${#Tokens[@]}" -gt iToken ]] || break
+		# all the rest is one token
+		DBGN 3 "  Token[${iToken}]: '${Tokens[iToken]}' (first of revision)"
+		echo -n "${Tokens[iToken++]}"
+		while [[ $iToken -lt "${#Tokens[@]}" ]]; do
+			DBGN 3 "  Token[${iToken}]: '${Tokens[iToken]}' (appended to revision)"
+			echo -n "_${Tokens[iToken++]}"
+		done
+		echo
+		
+	done
+} # SplitVersion()
+
+
+function SortVersions() {
+	local VersionTag
+	local -a HighestVersion
+	local HighestVersionTag
+	while read VersionTag ; do
+		DBGN 2 "Considering version '${VersionTag}'"
+		local -a ThisVersion=( )
+		local VersionToken
+		while read VersionToken ; do
+			ThisVersion=( "${ThisVersion[@]}" "$VersionToken" )
+		done < <(SplitVersion "$VersionTag")
+		local -i NThisTags="${#ThisVersion[@]}"
+		DBGN 3 "  parsed as ${NThisTags} elements: ${ThisVersion[@]}"
+		if [[ -n "$HighestVersion" ]]; then
+			local -i iVTag=0
+			while [[ $iVTag -lt $NThisTags ]]; do
+				local Highest="${HighestVersion[iVTag]}"
+				local This="${ThisVersion[iVTag]}"
+				DBGN 4 "    comparing items #${iVTag}: '${This}' vs. '${Highest}'"
+				let ++iVTag
+				[[ "$Highest" == "$This" ]] && continue # so far, the same
+				[[ -z "$This" ]] && continue 2 # this is not higher
+				[[ -z "$Highest" ]] && break # this IS higher
+				if isNumber "$This" && isNumber "$Highest" ; then
+					DBGN 4 "       (both numbers)"
+					[[ "$This" -gt "$Highest" ]] && break
+					continue 2
+				else
+					[[ "$This" > "$Highest" ]] && break
+					continue 2
+				fi
+			done
+			
+		fi
+		DBGN 2 "  => version '${VersionTag}' (${ThisVersion[@]}) is the new highest"
+		HighestVersion=( "${ThisVersion[@]}" )
+		HighestVersionTag="$VersionTag"
+	done
+	echo "$HighestVersionTag"
+} # SortVersions()
+
+
+function DetectLatestVersion() {
+	# prints the highest version among the packages matching a filter
+	local Filter="$1"
+	DBGN 2 "Detecting highest version among packages passing filter: '${Filter:-none}'"
+	PackageList | while read PackageName ; do
+		PackageDir="${MRB_SOURCE}/${PackageName}"
+		if [[ -n "$Filter" ]] && [[ ! "$PackageName" =~ $Filter ]]; then
+			DBGN 3 " - skip '${PackageName}' (filtered out)"
+			continue
+		fi
+		ProductDeps="${PackageDir}/ups/product_deps"
+		DBGN 3 " - check '${PackageName}' ('${ProductDeps}')"
+		[[ -r "$ProductDeps" ]] && echo "$ProductDeps"
+	done | xargs grep -h -e '^parent' | awk '{ print $3 ; }' | SortVersions
+} # DetectLatestVersion()
+
+
+function ExecCommandFilterOutput() {
+	local Prepend="$1"
+	shift
+	local -a Command=( "$@" )
+	if isFlagSet FAKE ; then
+		echo "DRYRUN| ${Command[@]}"
+		return 0
+	else
+		DBG "${Command[@]}"
+		if [[ -n "$Prepend" ]]; then
+			"${Command[@]}" | sed -e "s/^/${Prepend}/"
+		else
+			"${Command[@]}"
+		fi
+		return $?
+	fi
+} # ExecCommandFilterOutput()
+
+function ExecCommand() { ExecCommandFilterOutput '' "$@" ; }
+
 
 ################################################################################
 #
@@ -154,8 +319,9 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 		case "$Param" in
 			( '--help' | '-h' | '-?' )     DoHelp=1  ;;
 			( '--version' | '-V' )         DoVersion=1  ;;
-			
-			( '--ignoreinconsistency' )    IgnoreInconsistency=1 ;;
+			( '--debug' | '-d' )           DEBUG=1 ;;
+			( '--debug='* )                DEBUG="${Param#--*=}" ;;
+			( '--fake' | '--dryrun' )      FAKE=1 ;;
 			
 			### other stuff
 			( '-' | '--' )
@@ -207,49 +373,21 @@ echo "Working area: '${MRB_TOP}'"
 #
 # detect the target version
 #
-if [[ -z "$Version" ]]; then
-	if [[ -d "$MRB_SOURCE" ]]; then
-		declare ReferencePackage=""
-		declare HasMandatory=0
-		for PackageName in $(PackageList) ; do
-			declare PackageDir="${MRB_SOURCE}/${PackageName}"
-			
-			UPSfile="${PackageDir}/ups/product_deps"
-			[[ -r "$UPSfile" ]] || continue # no dependencies, no useful information
-			
-			if [[ "${PackageName:0:3}" == 'lar' ]]; then
-				Optional=0
-			else
-				Optional=1
-			fi
-			
-			declare -a ParentageInfo
-			ParentageInfo=( $(grep -e '^[[:blank:]]*parent[[:blank:]]*' "$UPSfile" | head -n 1) )
-			
-			ParentVersion="${ParentageInfo[2]}"
-			[[ -n "$ParentVersion" ]] || continue
-			
-# 			echo "${PackageName}: ${ParentVersion}"
-			
-			if [[ -n "$Version" ]] && [[ "$Version" != "$ParentVersion" ]]; then
-				ERROR "Inconsistent packages: ${ReferencePackage} asks for ${Version}, ${PackageName} for ${ParentVersion}."
-				
-				# if the inconsistent package is not among the mandatory ones, forgive
-				if isFlagSet HasMandatory ; then
-					isFlagUnset Optional && isFlagUnset IgnoreInconsistency && Version="" && break
-				fi
-			fi
-			
-			ReferencePackage="$PackageName"
-			Version="$ParentVersion"
-			
-			isFlagUnset Optional && HasMandatory=1
-			
-		done
-	else
-		EROR "No source directory available, can't autodetect the version."
+while [[ -z "$Version" ]]; do
+	if [[ ! -d "$MRB_SOURCE" ]]; then
+		ERROR "No source directory available, can't autodetect the version."
+		break
 	fi
-fi
+	
+	Version="$(DetectLatestVersion '^lar')"
+	DBG "Latest version among LArSoft sources: ${Version:-not found}"
+	[[ -n "$Version" ]] && break
+
+	Version="$(DetectLatestVersion)"
+	DBG "Latest version among all sources: ${Version:-not found}"
+	[[ -n "$Version" ]] && break
+	
+done
 [[ -z "$Version" ]] && FATAL 1 "I don't know which version to set up!"
 
 echo "Setting up the working area for ${MRB_PROJECT} ${Version} (${Qualifiers})"
@@ -272,7 +410,7 @@ fi
 
 declare -a Command=( mrb newDev -p -v "$Version" -q "$Qualifiers" )
 echo " ==> ${Command[@]}"
-"${Command[@]}" | sed -e 's/^/| /'
+ExecCommand "${Command[@]}"
 ExitCode=$?
 if [[ $ExitCode != 0 ]]; then
 	rm -f "$local_updatearea_SourceMe"
@@ -281,8 +419,8 @@ fi
 
 LocalProductsLink="${MRB_TOP}/localProducts"
 if [[ ! -e "$LocalProductsLink" ]] || [[ -h "$LocalProductsLink" ]]; then
-	rm -f "$LocalProductsLink"
-	ln -s "$LocalProductsDirName" "$LocalProductsLink" && echo "Updated 'localPrducts' link."
+	ExecCommand rm -f "$LocalProductsLink"
+	ExecCommand ln -s "$LocalProductsDirName" "$LocalProductsLink" && echo "Updated 'localPrducts' link."
 else
 	ERROR "Can't update localProduct since it does exist and it's not a link"
 fi
@@ -318,3 +456,4 @@ else  # sourcing
 	fi
 	unset local_updatearea_SourceMe local_updatearea_ExitCode
 fi
+
