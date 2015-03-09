@@ -164,6 +164,9 @@ case "$local_setup_mode" in
 			export MRB_PROJECT=larsoft
 		fi
 		
+		# set up UPS repositories used only as fallback
+		Setup UPS_fallback  >& >(sed -e "s/^/    [${local_setup_nOutput}> /")
+		
 		# set up UPS again, in case some newer version has become available
 		setup ups || let ++local_setup_nErrors
 		
