@@ -23,6 +23,17 @@ function FATAL() {
 	exit $Code
 } # FATAL()
 
+function isDebugging() {
+	local Level="${1:-1}"
+	[[ -n "$DEBUG" ]] && [[ "$DEBUG" -ge "$Level" ]]
+} # isDebugging()
+function DBGN() {
+	local Level="$1"
+	shift
+	isDebugging "$Level" && STDERR "DBG[${Level}]| $*"
+} # DBGN()
+function DBG() { DBGN 1 "$@" ; }
+
 function isFlagSet() {
 	local VarName="$1"
 	[[ -n "${!VarName//0}" ]]
@@ -47,6 +58,8 @@ function help() {
 	    the UPS package to be used
 	--pager=PAGER [${PAGER}]
 	    the command to be used to show the files
+	--debug[=LEVEL]
+	    increase the verbosity level
 	--version , -V
 	    prints the script version and exits
 	--help , -h , -?
@@ -91,13 +104,15 @@ function FindIncludeDir() {
 	# detect the include directory
 	local PackageName="$1"
 	local PackageDir="${2:-$(GetPackageDir "$PackageName")}"
+	DBGN 2 "Directory for package '${PackageName}' is '${PackageDir}'"
 	
 	local IncDir
 	
 	# ask UPS first
 	local IncDirVarName
-	for IncDirVarName in "${PackageName^^}_INC}" ; do
+	for IncDirVarName in "${PackageName^^}_INC" ; do
 		IncDir="${!IncDirVarName}"
+		DBGN 2 "Include dir: ${IncDirVarName}='${IncDir}'"
 		[[ -n "$IncDir" ]] && [[ -d "$IncDir" ]] && echo "$IncDir" && return 0
 	done
 	
@@ -111,13 +126,17 @@ function FindIncludeDir() {
 		UPSflavors=( "$UPSflavor" "${UPSflavors[@]}" ) # higher takes priority
 	done
 	
+	DBGN 2 "Trying to find include dir by building it with UPS flavours: ${UPSflavors[@]}"
 	local IncDir DirName
 	for DirName in "include/${PackageName,,}" "inc/${PackageName,,}" "include" "inc" ; do
+		DBGN 3 "  - trying '${DirName}'"
 		for FlavorDir in '' "${UPSflavors[@]}" ; do
 			IncDir="${PackageDir}/${FlavorDir:+${FlavorDir}/}${DirName}"
+			DBGN 4 "    -> '${IncDir}'"
 			[[ -d "$IncDir" ]] && echo "$IncDir" && return 0
 		done # for flavors
 	done # for directory pattern
+	DBG "No include directory found for '${PackageName}'"
 	return 2
 } # FindIncludeDir()
 
@@ -136,6 +155,8 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 		case "$Param" in
 			( '--package='* )          PackageName="${Param#--*=}" ;;
 			( '--pager='* )            PAGER="${Param#--*=}" ;;
+			( '--debug' )              DEBUG=1 ;;
+			( '--debug='* )            DEBUG="${Param#--*=}" ;;
 			( '--listonly' | '-L' )    ListOnly=1 ;;
 			( '--version' | '-V' )     DoVersion=1 ;;
 			( '--help' | '-h' | '-?' ) DoHelp=1 ;;
@@ -169,10 +190,12 @@ fi
 declare PackageSourceDir
 PackageSourceDir="$(FindSourceDir "$PackageName" "$PackageDir" )"
 if [[ $? != 0 ]]; then
+	DBG "Failed to find source dir (got: '${PackageSourceDir}')"
 	PackageSourceDir="$(FindIncludeDir "$PackageName" "$PackageDir" )"
 	if [[ $? == 0 ]]; then
 		WARN "Could not find the source directory of '${PackageName}' under '${PackageDir}'; using include dir '${PackageSourceDir}'."
 	else
+		DBG "Failed to find source dir (got: '${PackageSourceDir}')"
 		ERROR "Could not find source nor include directory of '${PackageName}' under '${PackageDir}'"
 		exit 2
 	fi
