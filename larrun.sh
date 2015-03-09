@@ -42,10 +42,14 @@
 #     added an option to activate debugging output for specific modules
 # 1.16 (petrillo@fnal.gov)
 #     added optional configuration dump for lar1ndcode and t962code
+# 1.17 (petrillo@fnal.gov)
+#     ".root" parameters are now interpreted as source files
+# 1.xx (petrillo@fnal.gov)
+#     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.16"
+SCRIPTVERSION="1.17"
 CWD="$(pwd)"
 
 DATETAG="$(datetag)"
@@ -115,6 +119,9 @@ function help() {
 	--inline , --nosandbox
 	    runs the command in the current directory rather than in a newly created
 	    one
+	--followlog , -f
+	    after starting, prints the output log on the screen; <Ctrl>+<C> will
+	    stop following the log, but the job will continue to the end
 	--jobname=JOBNAME
 	    the label for this job (the output directory and log file are named after
 	    it)
@@ -319,6 +326,12 @@ function SplitByComma() {
 
 function ListByComma() { ListBySep ", " "$@" ; }
 
+
+function isRunning() {
+	# returns whether the specified process is running
+	local PID="$1"
+	[[ -r "/proc/${PID}" ]]
+} # isRunning()
 
 function isAbsolute() {
 	local Path="$1"
@@ -860,13 +873,21 @@ function InterruptHandler() {
 	cd ${WorkDir}
 	EOM
 	exit 1
-} # Interrupt()
+} # InterruptHandler()
+
+
+function TailInterruptHandler() {
+	echo
+	
+	[[ -n "$TailPID" ]] && kill -INT "$TailPID"
+	
+} # TailInterruptHandler()
 
 
 ################################################################################
 declare JobBaseName
 
-declare DoHelp=0 DoVersion=0 OnlyPrintEnvironment=0 NoLogDump=0 UseConfigWrapper=1
+declare DoHelp=0 DoVersion=0 OnlyPrintEnvironment=0 FollowLog=0 NoLogDump=0 UseConfigWrapper=1
 
 declare -i NoMoreOptions=0
 declare ConfigFile
@@ -898,6 +919,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--background' | '--bg' )    NOBG=0    ;;
 			( '--inline' | '--nosandbox' ) SANDBOX=0 ;;
 			( '--sandbox' )                SANDBOX=1 ;;
+			( '--follow' | '-f' )          FollowLog=1 ;;
 			( '--nologdump' )              NoLogDump=1 ;;
 			( '--noconfigdump' )           DUMPCONFIG=0 ;;
 			( '--config='* | '--cfg='* )   ConfigFile="${Param#--*=}" ;;
@@ -1064,7 +1086,7 @@ for (( iParam = 0; iParam < $nParams ; ++iParam )); do
 	Param="${Params[iParam]}"
 	case "$Param" in
 		( '-s' | '-S' | '-T' | '-o' \
-			| '--source' | '--source-list' | '-TFileName' | '--output' \
+			| '--source' | '--source-list' | '--TFileName' | '--output' \
 			)
 			let ++iParam # skip the file name
 			LArParams=( "${LArParams[@]}" "$Param" "${Params[iParam]}" )
@@ -1074,6 +1096,9 @@ for (( iParam = 0; iParam < $nParams ; ++iParam )); do
 			let ++iParam # skip the file name
 			[[ -n "$ConfigFile" ]] && [[ "$ConfigFile" != "${Params[iParam]}" ]] && FATAL 1 "Configuration file specified more than once ('${ConfigFile}', then '${Params[iParam]}')"
 			ConfigFile="${Params[iParam]}"
+			;;
+		( *.root )
+			SourceFiles=( "${SourceFiles[@]}" "$Param" )
 			;;
 		( * )
 			LArParams=( "${LArParams[@]}" "$Param" )
@@ -1106,6 +1131,17 @@ set +o noclobber
 declare LogDir="$(dirname "$LogPath")"
 mkdir -p "$LogDir"
 [[ -d "$LogDir" ]] || FATAL 3 "Can't create the log directory '${LogDir}'."
+if [[ -e "$LogPath" ]]; then
+	if [[ -h "$LogPath" ]]; then
+		if [[ -r "$LogPath" ]]; then
+			FATAL 1 "Log file '${LogPath}' already exists (as a link)."
+		else
+			FATAL 1 "Log file '${LogPath}' already exists (as a broken link)."
+		fi
+	else
+		FATAL 1 "Log file '${LogPath}' already exists."
+	fi
+fi
 touch "$LogPath" || FATAL 2 "Can't create the log file '${LogPath}'."
 
 declare AbsoluteLogPath="$(MakeAbsolute "$LogPath")"
@@ -1354,7 +1390,7 @@ $(PrintPackageVersions)
 ================================================================================
 EOM
 
-export FHICL_FILE_PATH # be sure it's clear...
+export FHICL_FILE_PATH # be sure it is clear...
 if isFlagSet DUMPCONFIG ; then
 	export DebugConfigFile="${JobName}.cfg"
 #	export ART_DEBUG_CONFIG="$DebugConfigFile"
@@ -1400,6 +1436,35 @@ fi
 
 # go out of the sandbox if needed
 isFlagSet SANDBOX && popd > /dev/null
+
+if isFlagSet FollowLog ; then
+	if [[ -r "$LogPath" ]] ; then
+		cat <<-EOM
+		++===========================================================================++
+		||  Stop following by hitting <Ctrl>+<C>; job will not be stopped.           ||
+		++===========================================================================++
+		EOM
+		
+		# set Interrupt signal handler
+		trap TailInterruptHandler SIGINT
+		
+		tailf "$LogPath" &
+		TailPID="$!"
+		wait "$TailPID"
+		# reset to default the Interrupt signal handler
+		trap - SIGINT
+		
+		if [[ -n "$LarPID" ]]; then
+			if isRunning "$LarPID" ; then
+				echo "The job will follow (PID=${LarPID}), log file: '${LogPath}'"
+			else
+				echo "The job seems to have terminated already (was PID=${LarPID}), log file: '${LogPath}'"
+			fi
+		fi
+	else
+		ERROR "Log file '${LogPath}' not found!"
+	fi
+fi
 
 cat <<EOM
 To see the output:
