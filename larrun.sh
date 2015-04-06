@@ -44,12 +44,16 @@
 #     added optional configuration dump for lar1ndcode and t962code
 # 1.17 (petrillo@fnal.gov)
 #     ".root" parameters are now interpreted as source files
+# 1.18 (petrillo@fnal.gov)
+#     automatically use ROOT suppression file when running with memcheck
+# 1.19 (petrillo@fnal.gov)
+#     revamped configuration dump options
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.17"
+SCRIPTVERSION="1.19"
 CWD="$(pwd)"
 
 DATETAG="$(datetag)"
@@ -61,7 +65,6 @@ DATETAG="$(datetag)"
 
 : ${SANDBOX:=1}
 : ${NOBG:=0}
-: ${DUMPCONFIG:=1}
 
 #
 # Default options for the profilers here
@@ -470,6 +473,10 @@ function SetupProfiler() {
 						'-q' # reduce the plain text output
 						'--leak-check=full'
 						)
+					local ROOTSupp="${ROOT_DIR}/${ROOT_FQ}/etc/valgrind-root.supp"
+					if [[ -r "$ROOTSupp" ]]; then
+						PrependExecutableParameters=( "${PrependExecutableParameters[@]}" "--suppressions=${ROOTSupp}" )
+					fi
 					;;
 				( 'massif' )
 					StacksSupport=1
@@ -887,7 +894,7 @@ function TailInterruptHandler() {
 ################################################################################
 declare JobBaseName
 
-declare DoHelp=0 DoVersion=0 OnlyPrintEnvironment=0 FollowLog=0 NoLogDump=0 UseConfigWrapper=1
+declare -i DoHelp=0 DoVersion=0 OnlyPrintEnvironment=0 FollowLog=0 NoLogDump=0 UseConfigWrapper=1
 
 declare -i NoMoreOptions=0
 declare ConfigFile
@@ -902,6 +909,7 @@ declare -a AppendConfigFiles
 declare -a AppendConfigLines
 declare -a DebugModules
 declare -i OneStringCommand=0
+declare DumpConfigMode="Yes"
 for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
 	if ! isFlagSet NoMoreOptions && [[ "${Param:0:1}" == '-' ]]; then
@@ -921,7 +929,8 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--sandbox' )                SANDBOX=1 ;;
 			( '--follow' | '-f' )          FollowLog=1 ;;
 			( '--nologdump' )              NoLogDump=1 ;;
-			( '--noconfigdump' )           DUMPCONFIG=0 ;;
+			( '--noconfigdump' )           DumpConfigMode="No" ;;
+			( '--onlyconfigdump' )         DumpConfigMode="Only" ;;
 			( '--config='* | '--cfg='* )   ConfigFile="${Param#--*=}" ;;
 			( '-c' )                       let ++iParam ; ConfigFile="${!iParam}" ;;
 		#	( '--source='* | '--src='* )   SourceFiles=( "${SourceFiles[@]}" "${Param#--*=}" ) ;;
@@ -1147,6 +1156,34 @@ touch "$LogPath" || FATAL 2 "Can't create the log file '${LogPath}'."
 declare AbsoluteLogPath="$(MakeAbsolute "$LogPath")"
 
 #
+# process lar options
+#
+# OutputParams tracks lar arguments representing output files
+declare -a OutputParams
+
+declare DebugConfigFile=''
+# configuration dump is supported in three modes, implemented with different lar options:
+# - "Yes": configuration dumped into a file, then regular run
+# - "Only": configuration dumped into a file, no run
+case "$DumpConfigMode" in
+	( 'No' )
+		# "No": no configuration dump at all
+		;;
+	( 'Yes' | 'Only' )
+		DebugConfigFile="${WorkDir:+"${WorkDir%/}/"}${JobName}.cfg"
+		case "$DumpConfigMode" in
+			( 'Yes' )  ConfigDumpOption='--config-out' ;;
+			( 'Only' ) ConfigDumpOption='--dump-config' ;;
+			( * ) FATAL 1 "Internal error: incomplete implementation, DumpConfigMode='${DumpConfigMode}'" ;;
+		esac
+		LArParams=( "${LArParams[@]}" '--config-out' "$DebugConfigFile" )
+		OutputParams=( "${OutputParams[@]}" "$((${#LArParams[@]} - 1))" )
+		;;
+	( * )
+		FATAL 1 "Internal error: unsupported DumpConfigMode='${DumpConfigMode}'"
+esac
+
+#
 # prepare an empty sandbox
 #
 declare WorkDir="."
@@ -1171,6 +1208,13 @@ if isFlagSet SANDBOX ; then
 	# turn all the path parameters to absolute
 	for iParam in "${PathParams[@]}" ; do
 		Param="${LArParams[iParam]}"
+		LArParams[iParam]="$(MakeAbsolute "$Param")"
+	done
+
+	# turn all the output path parameters to absolute and in the sandbox
+	for iParam in "${OutputParams[@]}" ; do
+		Param="${LArParams[iParam]}"
+		isAbsolute "$Param" || Param="${WorkDir}/${Param}"
 		LArParams[iParam]="$(MakeAbsolute "$Param")"
 	done
 	
@@ -1334,6 +1378,7 @@ done
 SetupProfiler "$Profiler"
 LASTFATAL "Error setting up the profiling tool '${Profiler}'. Quitting."
 
+
 #
 # execute the command
 #
@@ -1384,6 +1429,9 @@ if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
 		echo "    ${ConfigLine}" >> "$AbsoluteLogPath"
 	done
 fi
+
+[[ "$DumpConfigMode" != "No" ]] && echo "Configuration dump into: '${DebugConfigFile}'" >> "$AbsoluteLogPath"
+
 cat <<EOM >> "$AbsoluteLogPath"
 ================================================================================
 $(PrintPackageVersions)
@@ -1391,14 +1439,6 @@ $(PrintPackageVersions)
 EOM
 
 export FHICL_FILE_PATH # be sure it is clear...
-if isFlagSet DUMPCONFIG ; then
-	export DebugConfigFile="${JobName}.cfg"
-#	export ART_DEBUG_CONFIG="$DebugConfigFile"
-	declare -a DumpCommand=( "${BaseCommand[0]}" --debug-config="$DebugConfigFile" "${BaseCommand[@]:1}" )
-	echo "Configuration dump into: '${DebugConfigFile}'" >> "$AbsoluteLogPath"
-	"${DumpCommand[@]}" > /dev/null
-	echo "================================================================================" >> "$AbsoluteLogPath"
-fi
 
 unset ART_DEBUG_CONFIG
 declare LarPID
@@ -1449,6 +1489,7 @@ if isFlagSet FollowLog ; then
 		trap TailInterruptHandler SIGINT
 		
 		tailf "$LogPath" &
+M
 		TailPID="$!"
 		wait "$TailPID"
 		# reset to default the Interrupt signal handler
