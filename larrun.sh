@@ -48,12 +48,14 @@
 #     automatically use ROOT suppression file when running with memcheck
 # 1.19 (petrillo@fnal.gov)
 #     revamped configuration dump options
+# 1.20 (petrillo@fnal.gov)
+#     added argoneutcode and lariatcode among the optional packages
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.19"
+SCRIPTVERSION="1.20"
 CWD="$(pwd)"
 
 DATETAG="$(datetag)"
@@ -91,7 +93,7 @@ StandardPackages=(
 )
 declare -a OptionalPackages
 OptionalPackages=(
-	uboonecode lbnecode lar1ndcode t962code
+	uboonecode lbnecode lar1ndcode t962code argoneutcode lariatcode
 )
 
 function help() {

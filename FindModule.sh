@@ -149,8 +149,11 @@ declare -i Found=0
 if isFlagSet FromSources ; then
 	
 	declare -a SourceFindCommands
+	declare -i iPattern=0
 	for Pattern in "${Patterns[@]:-"$DefaultPattern"}" ; do
+		[[ $iPattern -gt 0 ]] && SourceFindCommands=( "${SourceFindCommands[@]}" '-or' )
 		SourceFindCommands=( "${SourceFindCommands[@]}" "-${FindCommand}" "${Pattern}_module.cc" )
+		let ++iPattern
 	done
 	
 	if [[ -d "$MRB_SOURCE" ]]; then
@@ -167,8 +170,11 @@ fi
 # from libraries
 if isFlagSet FromLibraries ; then
 	declare -a LibraryFindCommands
+	declare -i iPattern=0
 	for Pattern in "${Patterns[@]:-"$DefaultPattern"}" ; do
-		LibraryFindCommands=( "${LibraryFindCommands[@]}" "-${FindCommand}" ".*/lib${Pattern}_module.so" )
+		[[ $iPattern -gt 0 ]] && LibraryFindCommands=( "${LibraryFindCommands[@]}" '-or' )
+		LibraryFindCommands=( "${LibraryFindCommands[@]}" "-${FindCommand}" "lib${Pattern}_module.so" )
+		let ++iPattern
 	done
 	
 	if [[ -n "$LD_LIBRARY_PATH" ]]; then

@@ -4,8 +4,8 @@
 # Run without parameters for usage instructions.
 #
 
-declare local_create_area_DefaultVersion="${LARCORE_VERSION:-"nightly"}"
-declare local_create_area_DefaultQual="${MRB_QUAL:-"debug:e5"}"
+declare local_create_area_DefaultVersion="${LARCORE_VERSION:-"develop"}"
+declare local_create_area_DefaultQual="${MRB_QUAL:-"e7:debug"}"
 
 function IsInList() {
 	# IsInList Key ListItem [...]
@@ -119,10 +119,15 @@ esac
 local_create_area_setup_qual="$(SortUPSqualifiers "${local_create_area_setup_qual//_/:}")"
 unset -f SortUPSqualifiers IsInList
 
+if [[ -z "$local_create_area_newarea" ]] && [[ -n "$local_create_area_setup_version" ]]; then
+	local_create_area_newarea="${local_create_area_setup_version}/${local_create_area_setup_qual//:/_}"
+fi
+
 if [[ "$BASH_SOURCE" == "$0" ]]; then
 	cat <<-EOM
 	Experiment:      ${local_create_area_experiment:-"generic"}
 	LArSoft version: ${local_create_area_setup_version} (${local_create_area_setup_qual})
+	Location:       '${local_create_area_newarea}'
 	This script needs to be sourced:
 	source $0 $@
 	EOM
@@ -136,10 +141,7 @@ if [[ -z "$local_create_area_setup_version" ]]; then
 	return 1
 fi
 
-if [[ -z "$local_create_area_newarea" ]] && [[ -n "$local_create_area_setup_version" ]]; then
-	local_create_area_newarea="${local_create_area_setup_version}/${local_create_area_setup_qual//:/_}"
-	echo "Creating a default working area: '${local_create_area_newarea}'"
-fi
+echo "Creating working area: '${local_create_area_newarea}'"
 
 
 ###

@@ -164,6 +164,22 @@ case "$local_setup_mode" in
 			export MRB_PROJECT=larsoft
 		fi
 		
+		function local_setup_AddCVMFSUPS() {
+			local BaseDir="$1"
+			shift
+			local ProductDir
+			for ProductDir in "$@" ; do
+				local ProductPath="${BaseDir}/${ProductDir}"
+				[[ -d "$ProductPath" ]] || continue
+				echo "Configuring CVMFS UPS repository '${ProductPath}'"
+				PRODUCTS="${PRODUCTS}:${ProductPath}"
+			done
+			export PRODUCTS
+		} # AddCVMFSUPS()
+		
+		# adding experiment-specific repositories from CVMFS as low priority
+		local_setup_AddCVMFSUPS "/cvmfs/oasis.opensciencegrid.org" "lbne/products" "microboone/products"
+		
 		# set up UPS repositories used only as fallback
 		Setup UPS_fallback  >& >(sed -e "s/^/    [${local_setup_nOutput}> /")
 		
@@ -175,7 +191,7 @@ case "$local_setup_mode" in
 			unset local_setup_nErrors
 			return 1
 		fi
-		unset local_setup_nErrors
+		unset local_setup_nErrors local_setup_AddCMMFSUPS
 		return 0
 		;; # base
 	

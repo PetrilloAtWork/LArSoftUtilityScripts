@@ -33,3 +33,10 @@ if [[ -x "${LARSCRIPTDIR}/largotorepo.sh" ]]; then
 	function nextrepo() { gotorepo ${1:-+1} ; }
 	function prevrepo() { gotorepo -${1:-1} ; }
 fi
+
+function goninja() {
+	pushd "$MRB_BUILDDIR" > /dev/null
+	ninja "$@"
+	popd > /dev/null
+} # goninja()
+

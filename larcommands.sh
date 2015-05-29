@@ -6,11 +6,15 @@
 # 20150304 (petrillo@fnal.gov) [v1.1]
 #   started tracking versions;
 #   added --version, --ifhasbranch, --ifcurrentbranch options
+# 20150415 (petrillo@fnal.gov) [v1.2]
+#   added --only and --skip options
+# 20150415 (petrillo@fnal.gov) [v1.3]
+#   added --command option
 #
 
 SCRIPTNAME="$(basename "$0")"
 SCRIPTDIR="$(dirname "$0")"
-SCRIPTVERSION="1.1"
+SCRIPTVERSION="1.3"
 
 : ${BASEDIR:="$(dirname "$(readlink -f "$SCRIPTDIR")")"}
 
@@ -31,12 +35,14 @@ function help() {
 	Special variable provided:
 	- PACKAGENAME: the name of the current package
 	
-	Options:
+	Command specification options:
 	--tag=TAGNAME
 	--tags=TAGNAME[,TAGNAME...]
 	    add a tag to the list of tags
 	--git
 	    adds "git" as command if it's not the first word of the command already
+	
+	Repository selection options:
 	--ifcurrentbranch=BRANCHNAME
 	    acts only on repositories whose current branch is BRANCHNAME; it can be
 	    specified more than once, in which case the operation will be performed
@@ -44,6 +50,20 @@ function help() {
 	--ifhasbranch=BRANCHNAME
 	    similar to '--ifcurrentbranch' above, performs the action only if the
 	    repository has one of the specified branches
+	--only=REGEX
+	    operates only on the repositories whose name matches the specified REGEX
+	--skip=REGEX
+	    skips the repositories whose name matches the specified REGEX
+	
+	Command line parsing options:
+	--command[=NARGS] command arg arg ...
+	    the next NARGS (default 0) plus one arguments are added to the command
+	--autodetect-command
+	    interprets the arguments as part of the command, starting at the first
+	    unknown option or at the first non-option argument; by default,
+	    if an option is unsupported an error is printed
+	
+	Other options:
 	--compact[=MODE]
 	    do not write the git command; out the output of the command according to
 	    MODE:
@@ -208,8 +228,11 @@ function isGoodRepo() {
 	
 	local RepoName="$(basename "$Dir")"
 	
+	DBGN 2 "Checking if repository '${RepoName}' should be processed..."
+	
+	local CurrentBranch
 	if [[ "${#OnlyIfCurrentBranches[@]}" -gt 0 ]]; then
-		local CurrentBranch="$(GetCurrentBranch "$Dir")"
+		[[ -z "$CurrentBranch" ]] && CurrentBranch="$(GetCurrentBranch "$Dir")"
 		DBGN 2 "Current branch of ${RepoName}: '${CurrentBranch}'"
 		
 		anyInList -- "${OnlyIfCurrentBranches[@]}" -- "$CurrentBranch" || return 1
@@ -222,6 +245,36 @@ function isGoodRepo() {
 		anyInList -- "${OnlyIfHasBranches[@]}" -- "${AllBranches[@]}" || return 1
 	fi
 	
+	if [[ "${#OnlyRepos[@]}" -gt 0 ]]; then
+		DBGN 2 "Checking ${#OnlyRepos[@]} repository name patterns"
+		local -i nMatches=0
+		local Pattern
+		for Pattern in "${OnlyRepos[@]}" ; do
+			if [[ "$RepoName" =~ $Pattern ]]; then
+				let ++nMatches
+				DBGN 3 "Repository '${RepoName}' matches '${Pattern}'"
+				break
+			else
+				DBGN 3 "Repository '${RepoName}' does not match '${Pattern}'"
+			fi
+		done
+		if [[ "$nMatches" == 0 ]]; then
+			DBGN 2 "Repository '${RepoName}' does not match any pattern: skipped!"
+			return 1
+		fi
+	fi
+	
+	if [[ "${#SkipRepos[@]}" -gt 0 ]]; then
+		DBGN 2 "Checking ${#SkipRepos[@]} repository name skip patterns"
+		local Pattern
+		for Pattern in "${SkipRepos[@]}" ; do
+			[[ "$RepoName" =~ $Pattern ]] || continue
+			DBGN 3 "Repository '${RepoName}' matches '${Pattern}': skipped!"
+			return 1
+		done
+		DBGN 2 "Repository '${RepoName}' does not match any skip pattern."
+	fi
+	
 	return 0
 } # isGoodRepo()
 
@@ -231,9 +284,12 @@ function isGoodRepo() {
 ### 
 declare CompactMode='normal'
 declare -i NoMoreOptions=0
+declare -i AutodetectCommand=0
 declare -a Command
 declare -a OnlyIfCurrentBranches
 declare -a OnlyIfHasBranches
+declare -a OnlyRepos
+declare -a SkipRepos
 for ((iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
 	if isFlagSet NoMoreOptions || [[ "${Param:0:1}" != '-' ]]; then
@@ -250,11 +306,31 @@ for ((iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( "--git" )
 				AddGit=1
 				;;
+			( "--command" | '--command='* )
+				NArgs="${Param#--*=}"
+				[[ "$NArgs" == "$Param" ]] && NArgs=1
+				DBGN 2 "Adding the ${NArgs} arguments after #${iParam} to the command"
+				EndArg="$((iParam + NArgs + 1))"
+				while [[ $iParam < $EndArg ]] && [[ $iParam < $# ]]; do
+					let ++iParam
+					Command=( "${Command[@]}" "${!iParam}" )
+				done
+				DBGN 3 "Command is now: ${Command[@]}"
+				;;
+			( '--autodetect-command' )
+				AutodetectCommand=1
+				;;
 			( '--ifcurrentbranch='* )
 				OnlyIfCurrentBranches=( "${OnlyIfCurrentBranches[@]}" "${Param#--*=}" )
 				;;
 			( '--ifhasbranch='* )
 				OnlyIfHasBranches=( "${OnlyIfHasBranches[@]}" "${Param#--*=}" )
+				;;
+			( '--only='* )
+				OnlyRepos=( "${OnlyRepos[@]}" "${Param#--*=}" )
+				;;
+			( '--skip='* )
+				SkipRepos=( "${SkipRepos[@]}" "${Param#--*=}" )
 				;;
 			( "--compact="* )
 				CompactMode="${Param#--compact=}"
@@ -285,7 +361,12 @@ for ((iParam = 1 ; iParam <= $# ; ++iParam )); do
 				NoMoreOptions=1
 				;;
 			( * )
-				FATAL 1 "Unknown option '${Param}'"
+				isFlagSet AutodetectCommand || FATAL 1 "Unknown option '${Param}'"
+				# interpret this option and the rest of the arguments
+				# as part of the command:
+				# reparse this option in the newly set "command" mode
+				NoMoreOptions=1
+				let --iParam
 		esac
 	fi
 done
@@ -315,6 +396,7 @@ if [[ ! -d "${BASEDIR}/srcs" ]]; then
 else
 	: ${SRCDIR:="${BASEDIR}/srcs"}
 fi
+DBGN 2 "Source directory: '${SRCDIR}'"
 
 ################################################################################
 ### execute the commands

@@ -15,7 +15,7 @@ VERSION="1.1"
 : ${BASEDIR:="."}
 
 declare -a StandardQualifiers
-StandardQualifiers=(       'debug:e6'  'e6:prof'   )
+StandardQualifiers=(       'debug:e7'  'e7:prof'   )
 StandardQualifierAliases=( 'debugging' 'profiling' )
 
 function help() {

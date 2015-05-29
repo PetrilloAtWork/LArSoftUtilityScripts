@@ -1,0 +1,3 @@
+#!/bin/bash
+
+echo "${LARSOFT_VERSION:-"larsoft not set up.}"

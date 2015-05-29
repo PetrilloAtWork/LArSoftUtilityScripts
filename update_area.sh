@@ -3,6 +3,12 @@
 # Updates the working area to allow for a new version.
 # Use `update_area.sh --help` for usage instructions.
 #
+# Changes
+# 20140326 (petrillo@fnal.gov) [v1.0]
+#     original version
+# 20150415 (petrillo@fnal.gov) [v1.1]
+#     added the "--fake" option
+# 
 
 
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then # sourcing
@@ -13,7 +19,7 @@ fi
 ( # subshell, protect from sourcing
 
 SCRIPTNAME="$(basename -- "$0")"
-SCRIPTVERSION="1.0"
+SCRIPTVERSION="1.1"
 
 declare -ar SkipRepositories=( 'ubutil' 'lbneutil' )
 
@@ -31,6 +37,8 @@ function help() {
 	--force
 	    force the recreation of the local products area; the data there will be
 	    lost!!
+	--dryrun , --fake , -n
+	    just prints the command that would be executed
 	--debug[=LEVEL], -d
 	    sets the verbosity level (0 is quietest; 1 if no level is specified)
 	--version , -V
@@ -248,7 +256,7 @@ function SortVersions() {
 				[[ -z "$Highest" ]] && break # this IS higher
 				if isNumber "$This" && isNumber "$Highest" ; then
 					DBGN 4 "       (both numbers)"
-					[[ "$This" -gt "$Highest" ]] && break
+					[[ "${This#0}" -gt "${Highest#0}" ]] && break
 					continue 2
 				else
 					[[ "$This" > "$Highest" ]] && break
@@ -317,11 +325,11 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
 	if ! isFlagSet NoMoreOptions && [[ "${Param:0:1}" == '-' ]]; then
 		case "$Param" in
-			( '--help' | '-h' | '-?' )     DoHelp=1  ;;
-			( '--version' | '-V' )         DoVersion=1  ;;
-			( '--debug' | '-d' )           DEBUG=1 ;;
-			( '--debug='* )                DEBUG="${Param#--*=}" ;;
-			( '--fake' | '--dryrun' )      FAKE=1 ;;
+			( '--help' | '-h' | '-?' )       DoHelp=1  ;;
+			( '--version' | '-V' )           DoVersion=1  ;;
+			( '--debug' | '-d' )             DEBUG=1 ;;
+			( '--debug='* )                  DEBUG="${Param#--*=}" ;;
+			( '--fake' | '--dryrun' | '-n' ) FAKE=1 ;;
 			
 			### other stuff
 			( '-' | '--' )
@@ -401,7 +409,7 @@ fi
 
 if [[ -d "$LocalProductsPath" ]] && isFlagSet FORCE ; then
 	echo "Local product directory '${LocalProductsDirName}' already exists: OVERWRITING IT!"
-	rm -R "$LocalProductsPath"
+	ExecCommand rm -R "$LocalProductsPath"
 fi
 if [[ -d "$LocalProductsPath" ]]; then
 	echo "Local product directory '${LocalProductsDirName}' already exists. Everything is good."
@@ -413,7 +421,7 @@ echo " ==> ${Command[@]}"
 ExecCommand "${Command[@]}"
 ExitCode=$?
 if [[ $ExitCode != 0 ]]; then
-	rm -f "$local_updatearea_SourceMe"
+	ExecCommand rm -f "$local_updatearea_SourceMe"
 	FATAL "$ExitCode" "Creation of the local products area failed!"
 fi
 
