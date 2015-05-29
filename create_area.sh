@@ -48,6 +48,31 @@ function SortUPSqualifiers() {
 } # SortUPSqualifiers()
 
 
+function CheckSetup() {
+	#
+	# checks that everything is fine with the current settings
+	#
+	which ups >& /dev/null || {
+		echo "FATAL ERROR: UPS not configured!"
+		return 1
+	}
+	if ! declare -f setup unsetup >& /dev/null ; then
+		cat <<-EOM
+		ERROR: setup/unsetup not available!
+		
+		UPS may be correctly set up, but its setup/unsetup functions are not visible to scripts.
+		A way to correct that in bash is to execute:
+		
+		export -f setup unsetup
+		
+		EOM
+		echo "FATAL ERROR: UPS is not fully operative in script environment." >&2
+		return 1
+	fi
+	return 0
+} # CheckSetup()
+
+
 declare local_create_area_scriptdir="$(dirname "$BASH_SOURCE")"
 
 if [[ $# == 0 ]]; then
@@ -131,15 +156,26 @@ if [[ "$BASH_SOURCE" == "$0" ]]; then
 	This script needs to be sourced:
 	source $0 $@
 	EOM
+	CheckSetup
 	[[ "$BASH_SOURCE" != "$0" ]] && return 1
 	exit 1
 fi
 
+###
+### Here we go: we do it!!
+###
+
+###
+### environment checks
+###
 if [[ -z "$local_create_area_setup_version" ]]; then
 	echo "You really need to specify a LArSoft version." >&2
 	unset local_create_area_scriptdir local_create_area_newarea local_create_area_experiment local_create_area_setup_version local_create_area_setup_qual
 	return 1
 fi
+
+# check that UPS is set up
+CheckSetup || return $?
 
 echo "Creating working area: '${local_create_area_newarea}'"
 
