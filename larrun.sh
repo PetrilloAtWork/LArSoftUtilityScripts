@@ -58,7 +58,7 @@ SCRIPTNAME="$(basename "$0")"
 SCRIPTVERSION="1.20"
 CWD="$(pwd)"
 
-DATETAG="$(datetag)"
+DATETAG="$(date '+%Y%m%d')"
 
 # this is the maximum number of logs that we allow; negative will allow any,
 # but it's better to leave it to a reasonably large value to avoid infinite
