@@ -25,21 +25,10 @@ function DBG() { DBGN 1 "$@" ; }
 	
 
 ###############################################################################
-function PackProduct() {
+function FindProduct() {
 	
 	local ProductName="$1"
-	local ProductVersion="${ProductName#*@}"
-	
-	###
-	### parse the product specification
-	###
-	if [[ "$ProductName" == "$ProductVersion" ]]; then
-		ProductVersion=""
-	else
-		ProductName="${ProductName%"@${ProductVersion}"}"
-	fi
-	
-	echo "Packing '${ProductName}' (${ProductVersion:-"all available versions"})"
+	local ProductVersion="$2"
 	
 	###
 	### Find the target
@@ -60,15 +49,27 @@ function PackProduct() {
 	done < <(tr ':' '\n' <<< "$PRODUCTS")
 	
 	if [[ ! -d "$TargetDir" ]]; then
-		echo "Product '${ProductName}' (${ProductVersion:-"any versions"}) not found!"
+		STDERR "Product '${ProductName}' (${ProductVersion:-"any versions"}) not found!"
 		return 2
 	fi
+	
+	echo "$ProductRepo"
+        return 0
+} # FindProduct()
+
+
+function MakeTarball() {
+	
+	local ProductRepo="$1"
+	local ProductName="$2"
+	local ProductVersion="$3"
 	
 	###
 	### pack
 	###
 	local OutputFile="${ProductName}${ProductVersion:+"-${ProductVersion}"}.tar.bz2"
 	
+	local TargetName="${ProductName}${ProductVersion:+"/${ProductVersion}.version"}"
 	local -a TargetDirs
 	if [[ -n "$ProductVersion" ]]; then
 		TargetDirs=( "$TargetName" "${TargetName%.version}" )
@@ -77,11 +78,53 @@ function PackProduct() {
 	fi
 	local res
 	echo "  (taken from '${ProductRepo}')"
-	tar cjf "$OutputFile" -C "$ProductRepo" "${TargetDirs[@]}"
+	local -a Cmd=( tar cjf "$OutputFile" -C "$ProductRepo" "${TargetDirs[@]}" )
+	DBG "${Cmd[@]}"
+	"${Cmd[@]}"
 	res=$?
 	if [[ $res == 0 ]]; then
 		echo "  '$(pwd)/${OutputFile}'"
 	fi
+	
+	###
+	### done
+	###
+        return $res
+} # MakeTarball()
+
+
+function PackProduct() {
+	
+	local -i res=0
+	
+	local ProductName="$1"
+	local ProductVersion="${ProductName#*@}"
+	
+	###
+	### parse the product specification
+	###
+	if [[ "$ProductName" == "$ProductVersion" ]]; then
+		ProductVersion=""
+	else
+		ProductName="${ProductName%"@${ProductVersion}"}"
+	fi
+	
+	echo "Packing '${ProductName}' (${ProductVersion:-"all available versions"})"	
+
+	###
+	### Find the target
+	###
+	local RepositoryPath
+	RepositoryPath="$(FindProduct "$ProductName" "$ProductVersion" )"
+	res=$?
+	DBG "Repository: '${RepositoryPath}' (error code: ${res})"
+	[[ $res != 0 ]] && return $res
+	
+	###
+	### pack
+	###
+	MakeTarball "$RepositoryPath" "$ProductName" "$ProductVersion"
+	res=$?
 	
 	###
 	### done
