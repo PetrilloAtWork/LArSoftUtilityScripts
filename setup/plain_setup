@@ -132,6 +132,16 @@ case "$local_setup_mode" in
 					local_setup_base_script=":golocal:"
 				fi
 				;;
+			( 'SBND' )
+				echo " * SBND specific setup"
+				local_setup_base_script="/grid/fermiapp/products/lar1nd/setup_lar1nd.sh"
+				if [[ -r "$local_setup_base_script" ]]; then
+					source "$local_setup_base_script" || let ++local_setup_nErrors
+				else
+					echo "    base setup script '${local_setup_base_script}' not available -- using local setup."
+					local_setup_base_script=":golocal:"
+				fi
+				;;
 			( * )
 				# this is experiment-agnostic setup:
 				echo " * generic LArSoft setup (${local_setup_experiment})"
