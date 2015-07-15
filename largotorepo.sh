@@ -121,10 +121,13 @@ function DetectLocation() {
 	local Cwd="$(readlink -f "$(pwd)")"
 	
 	local Mode
+	DBG "Trying to find out where '${Cwd}' is"
 	for Mode in 'SOURCE' 'BUILDDIR' 'INSTALL' 'TOP' ; do
 		local MRBVarName="MRB_${Mode}"
 		local MRBPath="$(readlink -f "${!MRBVarName}")"
+		DBGN 3 "${MRBVarName} => '${MRBPath}' [${Mode}]"
 		if [[ "$Cwd" == "$MRBPath" ]] || [[ "$Cwd" =~ ^${MRBPath}/ ]]; then
+			DBGN 2 "Matched: ${Mode}"
 			echo "$Mode"
 			return 0
 		fi
