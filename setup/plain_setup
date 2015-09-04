@@ -124,7 +124,7 @@ case "$local_setup_mode" in
 				;;
 			( 'LBNE' )
 				echo " * LBNE specific setup"
-				local_setup_base_script="/grid/fermiapp/lbne/software/setup_lbne.sh"
+				local_setup_base_script="/grid/fermiapp/products/dune/setup_dune.sh"
 				if [[ -r "$local_setup_base_script" ]]; then
 					source "$local_setup_base_script" || let ++local_setup_nErrors
 				else
