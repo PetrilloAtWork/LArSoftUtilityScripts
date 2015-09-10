@@ -433,11 +433,11 @@ else
 	ERROR "Can't update localProduct since it does exist and it's not a link"
 fi
 
-if [[ "$(basename "$MRB_BUILD")" == 'build' ]]; then
+if [[ "$(basename "$MRB_BUILDDIR")" =~ ^build ]]; then
 	cat <<-EOM
 	NOTA BENE: it is suggested that the working area is rebuilt anew:
 	mrb zapBuild
-	source mrb setEnv
+	mrbsetenv
 	mrb install
 	EOM
 fi

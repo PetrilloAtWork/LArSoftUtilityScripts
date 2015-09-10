@@ -473,13 +473,25 @@ fi
 case "${Experiment,,}" in
 	( 'auto' | 'autodetect' | '' )
 		;;
-	( 'lbne' )
-		Experiment="LBNE"
-		LeadingPackage="lbnecode"
+	( 'lbne' | 'dune' )
+		Experiment="DUNE"
+		LeadingPackage="dunetpc"
 		;;
 	( 'uboone' | 'microboone' )
 		Experiment="MicroBooNE"
 		LeadingPackage="uboonecode"
+		;;
+	( 'lariat' )
+		Experiment="LArIAT"
+		LeadingPackage="lariatsoft"
+		;;
+	( 'argoneut' )
+		Experiment="ArgoNeuT"
+		LeadingPackage="argoneutcode"
+		;;
+	( 'sbnd' | 'lar1nd' )
+		Experiment="SBND"
+		LeadingPackage="lar1ndcode"
 		;;
 	( 'larsoft' )
 		Experiment="LArSoft"

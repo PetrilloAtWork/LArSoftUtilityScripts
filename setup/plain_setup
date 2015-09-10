@@ -122,8 +122,8 @@ case "$local_setup_mode" in
 					local_setup_base_script=":golocal:"
 				fi
 				;;
-			( 'LBNE' )
-				echo " * LBNE specific setup"
+			( 'LBNE' | 'DUNE' )
+				echo " * DUNE specific setup"
 				local_setup_base_script="/grid/fermiapp/products/dune/setup_dune.sh"
 				if [[ -r "$local_setup_base_script" ]]; then
 					source "$local_setup_base_script" || let ++local_setup_nErrors
@@ -190,7 +190,7 @@ case "$local_setup_mode" in
 		} # AddCVMFSUPS()
 		
 		# adding experiment-specific repositories from CVMFS as low priority
-		local_setup_AddCVMFSUPS "/cvmfs/oasis.opensciencegrid.org" "lbne/products" "microboone/products"
+		local_setup_AddCVMFSUPS "/cvmfs/oasis.opensciencegrid.org" "dune/products" "microboone/products"
 		
 		# set up UPS repositories used only as fallback
 		Setup UPS_fallback  >& >(sed -e "s/^/    [${local_setup_nOutput}> /")
@@ -282,11 +282,11 @@ case "$local_setup_mode" in
 			( 'MicroBooNE' )
 				local_setup_codenames=( "${local_setup_codenames[@]}" )
 				;;
-			( 'LBNE' )
+			( 'LBNE' | 'DUNE' )
 				local_setup_codenames=( "${local_setup_codenames[@]}" )
 				;;
 			( 'AllExperiments' )
-				local_setup_codenames=( "${local_setup_codenames[@]}" 'lbnecode' 'uboonecode' )
+				local_setup_codenames=( "${local_setup_codenames[@]}" 'dunetpc' 'uboonecode' )
 				;;
 			( * )
 				local_setup_codenames=( "${local_setup_codenames[@]}" )
