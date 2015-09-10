@@ -20,6 +20,22 @@ SCRIPTVERSION="1.3"
 
 : ${PACKAGENAMETAG:="%PACKAGENAME%"}
 
+declare -ar LARSOFTCOREPACKAGES=(
+	'larcore'
+	'lardata'
+	'larevt'
+	'larsim'
+	'larreco'
+	'larpandora'
+	'lareventdisplay'
+	'larana'
+	'larexamples'
+	'larsoft'
+) # LARSOFTCOREPACKAGES[]
+
+###############################################################################
+### help messages
+###
 function help() {
 	cat <<-EOH
 	Executes a command in all the GIT repositories.
@@ -80,11 +96,34 @@ function help() {
 	    increase verbosity level
 	--version , -V
 	    prints the version of this script and exits
-	--help , -h , -?
-	    prints this help message
+	--help[=TOPIC], -h , -?
+	    prints an help message depending on the TOPIC:
+	    'help' [also default]: prints this message
+	    'library': prints information about the library functions and variable
+                made available to the calling scripts
 	
 	EOH
 } # help()
+
+function help_library() {
+	cat <<-EOH
+	${SCRIPTNAME} provides some environment variables and some functions.
+	
+	Environment variables:
+	PACKAGENAME
+	    the name of the repository being processed (e.g. 'larcore')
+	LARSOFTCOREPACKAGES [constant]
+	    list of ${#LARSOFTCOREPACKAGES[@]} LArSoft core packages:
+	    ${LARSOFTCOREPACKAGES[@]}
+	
+	Functions:
+	isLArSoftCorePackage [PackageName]
+	    returns 0 if the specified package name (\$PACKAGENAME by default)
+	    is one of the ${NCorePackages} LArSoft core packages
+	
+	EOH
+} # help_library()
+
 
 
 function PrintVersion() {
@@ -93,6 +132,10 @@ function PrintVersion() {
 	echo "${SCRIPTNAME} v. ${SCRIPTVERSION}${RealName:+" (based on ${RealName})"}"
 } # PrintVersion()
 
+
+###############################################################################
+### internal functions
+###
 
 function isFlagSet() { local VarName="$1" ; [[ -n "${!VarName//0}" ]]; }
 
@@ -103,6 +146,29 @@ function FATAL() {
 	STDERR "FATAL ERROR (${Code}): $*"
 	exit $Code
 } # FATAL()
+
+function PRINTSTACK() {
+	local -i SkipTop="${1:-1}"
+	local -i StackDepth="${#FUNCNAME[@]}"
+	echo "${SCRIPTNAME} calling stack (${StackDepth}):"
+	local -i Padding="${#StackDepth}"
+	local SourceFile
+	local -i iStack
+	for (( iStack = $SkipTop ; iStack < $StackDepth - 1 ; ++iStack )); do
+		SourceFile="${BASH_SOURCE[iStack]}"
+		if [[ "$SourceFile" == "$0" ]]; then
+			printf " [#%0*d] function %s  line #%d\n" $Padding $iStack "${FUNCNAME[iStack]}" "${BASH_LINENO[iStack]}"
+		else
+			printf " [#%0*d] function %s  line #%d (%s)\n" $Padding $iStack "${FUNCNAME[iStack]}" "${BASH_LINENO[iStack]}" "$SourceFile"
+		fi
+	done
+} # PRINTSTACK()
+
+function INTERNALERROR() {
+	STDERR "INTERNAL ERROR: $*"
+	# print the stack, skipping top 2 entries (PRINTSTACK and INTERNALERROR)
+	PRINTSTACK 2
+} # INTERNALERROR()
 
 function isDebugging() {
 	local -i Level="${1:-1}"
@@ -280,6 +346,23 @@ function isGoodRepo() {
 
 
 ################################################################################
+### library functions
+###
+function isLArSoftCorePackage() {
+	local Package="${1:-${PACKAGENAME}}"
+	if [[ -z "$Package" ]]; then
+		INTERNALERROR "Internal error: no Package variable provided!"
+		return 2
+	fi
+	local CorePackage
+	for CorePackage in "${LARSOFTCOREPACKAGES[@]}" ; do
+		DBGN 4 "Is '${Package}' the core package '${CorePackage}'?"
+		[[ "$Package" == "$CorePackage" ]] && return 0
+	done
+	return 1
+} # isLArSoftCorePackage()
+
+################################################################################
 ### parameters parser
 ### 
 declare CompactMode='normal'
@@ -354,8 +437,11 @@ for ((iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--version' | '-V' )
 				DoVersion=1
 				;;
+			( '--help='* )
+				HelpTopic="${Param#--*=}"
+				;;
 			( '--help' | '-?' | '-h' )
-				DoHelp=1
+				HelpTopic='help'
 				;;
 			( '-' | '--' )
 				NoMoreOptions=1
@@ -376,8 +462,14 @@ if isFlagSet DoVersion ; then
 	exit
 fi
 
-if isFlagSet DoHelp ; then
-	help
+if [[ -n "$HelpTopic" ]]; then
+	
+	case "$HelpTopic" in 
+        	( 'help' )     help ;;
+		( 'library' ) "help_${HelpTopic}" ;;
+		( * )
+			FATAL 1 "Unknown help topic: '${HelpTopic}'"
+	esac
 	exit
 fi
 
