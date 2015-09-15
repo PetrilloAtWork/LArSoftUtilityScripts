@@ -11,5 +11,5 @@
 
 SCRIPTDIR="$(dirname "$0")"
 
-"${SCRIPTDIR}/larcommands.sh" "$@" --git status
+"${SCRIPTDIR}/larcommands.sh" --git --miscargs=$# "$@" -- -c color.status=always status
 
