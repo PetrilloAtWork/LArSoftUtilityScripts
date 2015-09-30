@@ -13,7 +13,7 @@ SCRIPTVERSION="1.0"
 function ExtractDependVersion() {
 	local ProductDepsFile="$1"
 	local PackageName="$2"
-	grep "^${PackageName}" "$UPSdeps" | awk '{ print $2 ; }'
+	grep -e "^${PackageName}[[:space:]]" "$UPSdeps" | awk '{ print $2 ; }'
 	return ${PIPESTATUS[0]}
 } # ExtractDependVersion()
 

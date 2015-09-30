@@ -764,7 +764,7 @@ function ImportFileInWorkArea() {
 	if [[ -d "$OriginalPath" ]] || [[ ! -f "$DestPath" ]] || ! cmp -s "$OriginalPath" "$DestPath" ; then
 		DBG "Copying '${OriginalPath}' into '${DestPath}'"
 		mkdir -p "$(dirname "$DestPath")"
-		cp -a "$OriginalPath" "$DestPath"
+		cp -aH "$OriginalPath" "$DestPath"
 	fi
 	# if the destination is plainly in the working area,
 	# print only the relative path to it; otherwise print the absolute path
