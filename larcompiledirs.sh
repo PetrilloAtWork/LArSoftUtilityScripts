@@ -32,6 +32,8 @@ function Help() {
 	    number of failures
 	    Note that this is not the '-k' option of \`make\`; to pass that one,
 	    write it after the options escape '--'
+	--makeopt=OPTION
+	    passes an option to the make program
 	-- , -
 	    the following arguments are all to be passed to \`make\`
 	--help , -h , -?
@@ -133,7 +135,7 @@ function CompileDir() {
 	
 	(
 		cd "$DirPath"
-		make "${Targets[@]}"
+		make "${MakeOpts[@]}" -- "${Targets[@]}"
 	)
 	local -i res=$?
 	
@@ -152,6 +154,7 @@ function CompileDir() {
 declare -a MakeTargets
 declare -i NMakeTargets=0
 declare -a BaseDirs
+declare -a MakeOpts=( ${MAKEOPTS} )
 declare -i NBaseDirs=0
 declare -i NoMoreOptions=0
 declare -a WrongParameters
@@ -164,6 +167,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '-h' | '--help' | '-?' ) DoHelp=1 ;;
 			( '--basedir='* ) BaseDirs[NBaseDirs++]="${Param#--*=}" ;;
 			( '--keepgoing' | '--keep-going' | '-k' ) KeepGoing=1 ;;
+			( '--makeopt='* ) MakeOpts=( "${MakeOpts[@]}" "${Param#--*=}" ) ;;
 			( '-' | '--' )   NoMoreOptions=1 ;;
 			( * )
 				WrongParameters=( "${WrongParameters[@]}" "$iParam" )

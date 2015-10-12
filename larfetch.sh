@@ -65,9 +65,6 @@ function GetCurrentBranch() {
 } # GetCurrentBranch()
 
 function GitFetchAndRebase() {
-	local -r ANSIYELLOW="\e[33;1m"
-	local -r ANSICYAN="\e[36;1m"
-	local -r ANSIRESET="\e[0m"
 	local -r HIGHLIGHT="$ANSIYELLOW"
 	local -r HIGHLIGHTREBASE="$ANSICYAN"
 	

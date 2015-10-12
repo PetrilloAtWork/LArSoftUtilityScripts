@@ -16,11 +16,13 @@
 #     processing;
 #   new handling of help messages;
 #   new option --skipnooutput;
+# 20151005 (petrillo@fnal.gov) [v2.1]
+#   colouring the repository name by default
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
 BASESCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-BASESCRIPTVERSION="2.0"
+BASESCRIPTVERSION="2.1"
 
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
@@ -56,6 +58,22 @@ declare -ar LARSOFTCOREPACKAGES=(
 	'larexamples'
 	'larsoft'
 ) # LARSOFTCOREPACKAGES[]
+
+declare -r ANSIRESET="\e[0m"
+declare -r ANSIREVERSE="\e[7m"
+declare -r ANSIUNDERLINE="\e[4m"
+declare -r ANSIWHITE="\e[1;37m"
+declare -r ANSIRED="\e[31m"
+declare -r ANSIBLUE="\e[34m"
+declare -r ANSIBROWN="\e[33m"
+declare -r ANSIYELLOW="\e[1;33m"
+declare -r ANSIBGRED="\e[41m"
+declare -r ANSIBGBROWN="\e[43m"
+declare -r ANSIBGVIOLET="\e[48;5;219m"
+declare -r ANSIBGPINK="\e[48;5;225m"
+declare REPONAMECOLOR="${ANSIYELLOW}${ANSIBGBROWN}"
+declare HEADERCOLOR="${ANSIUNDERLINE}${ANSIBROWN}"
+declare ERRORCOLOR="${ANSIBGRED}${ANSIYELLOW}"
 
 ###############################################################################
 ### help messages
@@ -106,6 +124,12 @@ function help_baseoptions() {
 	    'prepend' (default): "[%PACKAGENAME%] OUTPUT"
 	    'line' (default): "[%PACKAGENAME%]\nOUTPUT"
 	    'append': "OUTPUT [%PACKAGENAME%]"
+	--color[=<false|always|auto>] [always]
+	    uses color to write the repository name, unless the mode is "false";
+	    also it instructs git to use the specified mode for the color output;
+	    "no" is an alias for "false", "yes" is an alias for "always"
+	--color
+	    equivalent to "--usecolor=no"
 	--skipnooutput
 	    don't write anything for packages whose output is empty
 	--keepnooutput
@@ -271,6 +295,18 @@ function DBGN() {
 	isDebugging "$Level" && STDERR "DBG[${Level}]| $*"
 } # DBGN()
 function DBG() { DBGN 1 "$@" ; }
+
+function DUMPVAR() {
+	local VarName="$1"
+	DBG "${VarName}='${!VarName}'"
+} # DUMPVAR()
+
+function DUMPVARS() {
+	local VarName
+	for VarName in "$@" ; do
+		DUMPVAR "$VarName"
+	done
+} # DUMPVARS()
 
 
 function ReturnNamedArray() {
@@ -598,9 +634,24 @@ function ArgumentTag() {
 } # ArgumentTag()
 
 
+function useColorInScript() {
+	[[ "$ColorMode" == "always" ]] || [[ "$ColorMode" == "auto" ]]
+} # useColorInScript()
+
+function ColorMsg() {
+	local ColorCode="${1%COLOR}COLOR"
+	shift
+	local Msg="$*"
+	if useColorInScript ; then
+		echo -en "${!ColorCode}${Msg}${ANSIRESET}"
+	else
+		echo -n "$Msg"
+	fi
+} # ColorMsg()
+
 function PrepareHeader() {
 	local Specs="$1"
-	local Content="$2"
+	local Content="$(ColorMsg HEADER "$2")"
 	
 	case "${Specs:0:1}" in
 		( '-' )
@@ -727,6 +778,30 @@ function PullCommand() {
 } # PullCommand()
 
 
+function isGit() {
+	isFlagSet AddGit || [[ "$(basename -- "$ProgramName")" == "git" ]]
+} # isGit()
+
+
+function AddGitOptions() {
+	# if it's not a git command, don't do anything here
+	isGit || return
+	
+	DBGN 3 "Adding 'git' to command: ${ProgramName} ${ProgramArgs[@]}"
+	
+	# add 'git' as a command, unless it's there already
+	if [[ "$(basename -- "$ProgramName")" != "git" ]]; then
+		ProgramArgs=( "$ProgramName" "${ProgramArgs[@]}" )
+		ProgramName='git'
+	fi
+	
+	# add the color option
+	if [[ -n "$ColorMode" ]]; then
+		ProgramArgs=( '-c' "color.ui=${ColorMode}" "${Command[@]:1}" "${ProgramArgs[@]}" )
+	fi
+} # AddGitOptions()
+
+
 function PrintHelp() {
 	#
 	# Prints help according to the requested topic
@@ -760,16 +835,19 @@ function SetDefaultOptions() {
 	#
 	# Sets the dsefault option values before command line parsing takes place
 	#
-	declare CompactMode='normal'
-	declare -i NoMoreOptions=0
-	declare -i AutodetectCommand=0
-	declare -i SkipEmptyOutput=0
-	declare ProgramName
-	declare -a ProgramArgs
-	declare -a OnlyIfCurrentBranches
-	declare -a OnlyIfHasBranches
-	declare -a OnlyRepos
-	declare -a SkipRepos
+	DBGN 2 "Setting up the default options"
+	# TODO waiting for bash version supporting 'declare -g' option
+	CompactMode='normal'
+	ColorMode='always'
+	NoMoreOptions=0
+	AutodetectCommand=0
+	SkipEmptyOutput=0
+	ProgramName=""
+	ProgramArgs=( )
+	OnlyIfCurrentBranches=( )
+	OnlyIfHasBranches=( )
+	OnlyRepos=( )
+	SkipRepos=( )
 } # SetDefaultOptions()
 
 function StandardOptionParser() {
@@ -841,6 +919,15 @@ function StandardOptionParser() {
 		( "--compact="* )
 			CompactMode="${Param#--compact=}"
 			;;
+		( "--color" )
+			ColorMode="$(ParseColorOption "always")"
+			;;
+		( "--nocolor" )
+			ColorMode="$(ParseColorOption "no")"
+			;;
+		( "--color="* )
+			ColorMode="$(ParseColorOption "${Param#--*=}")"
+			;;
 		( '--skipnooutput' )
 			SkipEmptyOutput=1
 			;;
@@ -882,6 +969,19 @@ function StandardOptionParser() {
 } # StandardOptionParser()
 
 
+function ParseColorOption() {
+	local Option="$1"
+	local Mode="$ColorMode"
+	case "${Option,,}" in
+		( 'always' | 'yes' ) Mode="always" ;;
+		( 'auto' )           Mode="auto" ;;
+		( 'false' | 'no' )   Mode="false" ;;
+		( * )                FATAL 1 "Value '${Option}' is not a supported color mode"
+	esac
+	echo "$Mode"
+} # ParseColorOption()
+
+
 ################################################################################
 ### library functions
 ###
@@ -906,6 +1006,8 @@ SetDefaultOptions
 declare -a OptionParsers # might exist already
 # add StandardOptionParser to the end of the parsers, if not present already
 anyInList -- 'StandardOptionParser' -- "${OptionParsers[@]}" || OptionParsers=( "${OptionParsers[@]}" 'StandardOptionParser' )
+
+DUMPVARS ColorMode NoMoreOptions
 
 declare -i iParam=0
 declare -a Params=( "$@" )
@@ -961,6 +1063,8 @@ while [[ iParam -lt $NMiscArguments ]]; do
 	let ++iParam
 done
 
+AddGitOptions
+
 if isFlagSet DoVersion ; then
 	PrintVersion
 	exit
@@ -992,8 +1096,6 @@ DBGN 2 "Source directory: '${SRCDIR}'"
 
 declare -a Command
 eval "Command=( $(PullCommand) )"
-
-[[ "${Command[0]}" != "git" ]] && isFlagSet AddGit && Command=( 'git' "${Command[@]}" )
 
 DBG  "Command: ${Command[@]}"
 
@@ -1031,23 +1133,23 @@ for Dir in "$SRCDIR"/* ; do
 			( 'prepend'* )
 				Header="$(PrepareHeader "${CompactMode#prepend}" "[${PACKAGENAME}]")"
 				echo -n "${Header} ${Output}"
-				[[ $res != 0 ]] && echo -n " (exit code: ${res})"
+				[[ $res != 0 ]] && echo -n " $(ColorMsg ERROR "(exit code: ${res})")"
 				echo
 				;;
 			( 'line' )
-				echo "[${PACKAGENAME}]"
+				ColorMsg HEADER "[${PACKAGENAME}]" && echo
 				[[ -n "$Output" ]] && echo "$Output"
-				[[ $res != 0 ]] && echo " (exit code: ${res})"
+				[[ $res != 0 ]] && echo " $(ColorMsg ERROR "(exit code: ${res})")"
 				;;
 			( 'append'* )
 				Header="$(PrepareHeader "${CompactMode#append}" "[${PACKAGENAME}]")"
 				echo -n "${Output} ${Header}"
-				[[ $res != 0 ]] && echo -n " (exit code: ${res})"
+				[[ $res != 0 ]] && echo " $(ColorMsg ERROR "(exit code: ${res})")"
 				echo
 				;;
 			( * )
-				echo -n "${PACKAGENAME}: ${PackageCommand[@]}"
-				[[ $res != 0 ]] && echo -n " [exit code: ${res}]"
+				echo -n "$(ColorMsg REPONAME $PACKAGENAME)$(ColorMsg HEADER ": ${PackageCommand[*]}")"
+				[[ $res != 0 ]] && echo -n " $(ColorMsg ERROR "[exit code: ${res}]")"
 				echo
 				[[ -n "$Output" ]] && echo "$Output"
 		esac
