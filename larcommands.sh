@@ -18,6 +18,8 @@
 #   new option --skipnooutput;
 # 20151005 (petrillo@fnal.gov) [v2.1]
 #   colouring the repository name by default
+# 20151023 (petrillo@fnal.gov) [v2.2]
+#   long help messages are paged via $PAGER
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
@@ -307,6 +309,18 @@ function DUMPVARS() {
 		DUMPVAR "$VarName"
 	done
 } # DUMPVARS()
+
+
+function Pager() {
+	# executes the pager
+	local PagerProgram="${PAGER:-less}"
+	local -a PagerOptions
+	if [[ "$(basename "$PagerProgram")" == 'less' ]]; then
+		PagerOptions=( '-F' )
+	fi
+	PagerOptions=( "${PagerOptions[@]}" "$@" )
+	"$PagerProgram" "${PagerOptions[@]}"
+} # Pager()
 
 
 function ReturnNamedArray() {
@@ -817,12 +831,13 @@ function PrintHelp() {
 				help_base
 			fi
 			;;
-		( '' )         return 1 ;; # no help requested
+		( '' )
+			return 1 ;; # no help requested
 		( * )
 			local HelpFuncName="help_${HelpTopic}"
 			isFunction HelpFuncName || FATAL 1 "Unknown help topic: '${HelpTopic}'"
 			HelpFuncName
-	esac
+	esac | Pager
 	exit
 } # PrintHelp()
 
