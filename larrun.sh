@@ -50,12 +50,16 @@
 #     revamped configuration dump options
 # 1.20 (petrillo@fnal.gov)
 #     added argoneutcode and lariatcode among the optional packages
+# 1.21 (petrillo@fnal.gov)
+#     print art-specific environment values
+# 1.22 (petrillo@fnal.gov)
+#     renamed 'lbnecode' optional package name into 'dunetpc'
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.20"
+SCRIPTVERSION="1.22"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -93,7 +97,7 @@ StandardPackages=(
 )
 declare -a OptionalPackages
 OptionalPackages=(
-	uboonecode lbnecode lar1ndcode t962code argoneutcode lariatcode
+	uboonecode dunetpc lar1ndcode t962code argoneutcode lariatcode
 )
 
 function help() {
@@ -414,6 +418,23 @@ function FindNextLogFile() {
 
 
 function LowerCase() { local VarName="$1" ; tr '[:upper:]' '[:lower:]' <<< "${!VarName}" ; }
+
+function PathList() {
+	# Prints the paths in the specified arguments, one per line
+	# (the variable is a colon-separated list of paths)
+	local Paths
+	for Paths in "$@" ; do
+		tr ':' '\n' <<< "$Paths"
+		echo
+	done
+} # PathList()
+
+function PathListVar() {
+	# Prints the paths in the specified variable, one per line
+	# (the variable is a colon-separated list of paths)
+	local VarName="$1"
+	PathList "${!VarName}"	
+} # PathListVar()
 
 
 function SetupProfiler() {
@@ -1433,6 +1454,14 @@ if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
 fi
 
 [[ "$DumpConfigMode" != "No" ]] && echo "Configuration dump into: '${DebugConfigFile}'" >> "$AbsoluteLogPath"
+
+# print environment variables:
+{
+	echo "FHiCL search path (FHICL_FILE_PATH):"
+	PathListVar FHICL_FILE_PATH | sed -e 's/^/  /' 
+	echo "Framework data search path (FW_SEARCH_PATH):"
+	PathListVar FW_SEARCH_PATH | sed -e 's/^/  /' 
+} >> "$AbsoluteLogPath"
 
 cat <<EOM >> "$AbsoluteLogPath"
 ================================================================================
