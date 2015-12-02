@@ -144,6 +144,7 @@ fi
 
 # set up check
 declare -a AvailablePackages
+declare -a ModulesFound
 declare -i nErrors=0
 for PackageName in "${Packages[@]}" ; do
 	declare PackageDir="$(GetPackageDir "$PackageName")"
@@ -152,6 +153,7 @@ for PackageName in "${Packages[@]}" ; do
 		continue
 	fi
 	AvailablePackages=( "${AvailablePackages[@]}" "$PackageName" )
+	DBGN 1 "Package: '${PackageName}'"
 
 	# detect the source directory
 	declare PackageModuleDir
@@ -164,18 +166,17 @@ for PackageName in "${Packages[@]}" ; do
 	fi
 	
 	# process all the patterns one by one
-	declare -a ModulesFound
 	for Pattern in "${Patterns[@]}" ; do
+		DBGN 2 "  Pattern: '${Pattern}'"
 		
-		declare -a PatternMatches
+		declare -a PatternMatches=()
 		
 		while read Match ; do
 			PatternMatches=( "${PatternMatches[@]}" "$Match" )
 		done < <(FindMatches "$Pattern" "$PackageModuleDir" )
 		
 		if [[ "${#PatternMatches[@]}" == 0 ]]; then
-			let ++nErrors
-			ERROR "Pattern '${Pattern}' does not match any ${PackageName} CMake module."
+			DBGN 1 "Pattern '${Pattern}' does not match any ${PackageName} CMake module."
 			continue
 		fi
 			
@@ -188,9 +189,12 @@ done # for UPS products
 [[ "${AvailablePackages[@]}" == 0 ]] && FATAL 1 "No relevant package set up!"
 
 # print all the sources we could find
-for Module in "${ModulesFound}" ; do
-	echo "$Module"
-done
-	
+if [[ "${#ModulesFound[@]}" == 0 ]]; then
+	ERROR "No items matching the specified pattern(s)!"
+else
+	for Module in "${ModulesFound[@]}" ; do
+		echo "$Module"
+	done
+fi
 exit $nErrors
 
