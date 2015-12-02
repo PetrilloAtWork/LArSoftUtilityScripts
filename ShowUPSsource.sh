@@ -54,7 +54,7 @@ function help() {
 	Options:
 	--listonly , -L
 	    do not show the files, only print their path
-	--package=PACKAGE [${DEFAULTPACKAGE}]
+	--package=PACKAGE , -p PACKAGE [${DEFAULTPACKAGE}]
 	    the UPS package to be used
 	--pager=PAGER [${PAGER}]
 	    the command to be used to show the files
@@ -154,6 +154,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	if [[ "${Param:0:1}" == '-' ]] && isFlagUnset NoMoreOptions ; then
 		case "$Param" in
 			( '--package='* )          PackageName="${Param#--*=}" ;;
+			( '-p' )                   let ++iParam; PackageName="${!iParam}" ;;
 			( '--pager='* )            PAGER="${Param#--*=}" ;;
 			( '--debug' )              DEBUG=1 ;;
 			( '--debug='* )            DEBUG="${Param#--*=}" ;;
