@@ -111,8 +111,8 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
 			while [[ "$local_create_area_dir" != "/" ]]; do
 				
 				case "$(basename "$local_create_area_dir" | tr '[:lower:]' '[:upper:]')" in
-					( 'LBNE' )
-						local_create_area_experiment='LBNE'
+					( 'LBNE' | 'DUNE' )
+						local_create_area_experiment='DUNE'
 						break 2
 						;;
 					( 'UBOONE' | 'MICROBOONE' )
@@ -126,15 +126,15 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
 		unset local_create_area_dir
 		
 		if [[ -z "$local_create_area_experiment" ]]; then
-			if [[ -d "/lbne" ]]; then
-				local_create_area_experiment="LBNE"
+			if [[ -d '/dune' ]] ||  [[ -d '/lbne' ]]; then
+				local_create_area_experiment="DUNE"
 			elif [[ -d "/uboone" ]]; then
 				local_create_area_experiment="MicroBooNE"
 			fi
 		fi
 		;;
-	( 'lbne' )
-		local_create_area_experiment="LBNE"
+	( 'lbne' | 'dune' )
+		local_create_area_experiment="DUNE"
 		;;
 	( 'uboone' | 'microboone' )
 		local_create_area_experiment="MicroBooNE"
