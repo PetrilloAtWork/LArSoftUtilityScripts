@@ -386,8 +386,13 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 		if [[ -z "$ExperimentTry" ]]; then
 			for TestName in "$DirName" "$DirRealName" ; do
 				case "${TestName^^}" in
-					( 'LBNE' )
-						ExperimentTry='LBNE'
+					( 'DUNE' | 'LBNE' )
+						ExperimentTry='DUNE'
+						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
+						continue 2
+						;;
+					( 'LAR1ND' | 'SBND' )
+						ExperimentTry='SBND'
 						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
 						continue 2
 						;;
@@ -449,8 +454,10 @@ unset ExperimentTry LArSoftVersionTry LArSoftQualifiersTry
 
 # still nothing, try to autodetect from the mounted directories
 if [[ -z "$Experiment" ]]; then
-	if [[ -d "/lbne" ]]; then
-		Experiment="LBNE"
+	if [[ -d "/lbne" ]] || [[ -d "/dune" ]]; then
+		Experiment="DUNE"
+	elif [[ -d "/lar1nd" ]] || [[ -d "/sbnd" ]]; then
+		Experiment="SBND"
 	elif [[ -d "/uboone" ]]; then
 		Experiment="MicroBooNE"
 	else
@@ -513,4 +520,3 @@ Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${PackageVersionFormat}/\1${LeadingPacka
 Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${LeadingPackageFormat}/\1${LeadingPackage}/g" <<< "$Output")"
 Output="$(sed -e "s/${ItemTag}${ItemTag}/${ItemTag}/g" <<< "$Output")"
 printf "$Output"
-

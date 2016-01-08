@@ -115,6 +115,10 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
 						local_create_area_experiment='DUNE'
 						break 2
 						;;
+					( 'LAR1ND' | 'SBND' )
+						local_create_area_experiment='SBND'
+						break 2
+						;;
 					( 'UBOONE' | 'MICROBOONE' )
 						local_create_area_experiment='MicroBooNE'
 						break 2
@@ -128,6 +132,8 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
 		if [[ -z "$local_create_area_experiment" ]]; then
 			if [[ -d '/dune' ]] ||  [[ -d '/lbne' ]]; then
 				local_create_area_experiment="DUNE"
+			elif [[ -d '/sbnd' ]] ||  [[ -d '/lar1nd' ]]; then
+				local_create_area_experiment="SBND"
 			elif [[ -d "/uboone" ]]; then
 				local_create_area_experiment="MicroBooNE"
 			fi
@@ -135,6 +141,9 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
 		;;
 	( 'lbne' | 'dune' )
 		local_create_area_experiment="DUNE"
+		;;
+	( 'lar1nd' | 'sbnd' )
+		local_create_area_experiment="SBND"
 		;;
 	( 'uboone' | 'microboone' )
 		local_create_area_experiment="MicroBooNE"
