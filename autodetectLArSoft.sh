@@ -210,8 +210,9 @@ function ParseLocalSetup() {
 function FindLocalProductsDir() {
 	local BaseDir="${1:-$MRB_TOP}"
 	[[ -d "$BaseDir" ]] || return 1
-	for Pattern in ${MRB_PROJECT:+"localProducts_${MRB_PROJECT}_"} "localProducts_" "localProducts" "localProd" ; do
+	for Pattern in "localProducts" ${MRB_PROJECT:+"localProducts_${MRB_PROJECT}_*"} "localProducts_*" "localProd*" ; do
 		local LocalProductsDir
+		
 		while read LocalProductsDir ; do
 			DBGN 2 "  testing directory '${LocalProductsDir}'"
 			local SetupFile="${LocalProductsDir}/setup"
@@ -230,7 +231,7 @@ function FindLocalProductsDir() {
 			DBGN 2 "Local product directory is valid: '${LocalProductsDir}'"
 			echo "$LocalProductsDir"
 			return 0
-		done < <( ls -drv "$Pattern"* 2> /dev/null )
+		done < <( find . -maxdepth 1 -xtype d -name "$Pattern" 2> /dev/null )
 	done
 	return 1
 } # FindLocalProductsDir()
