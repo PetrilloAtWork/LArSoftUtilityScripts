@@ -3,7 +3,7 @@
 # This sets up a runtime environment for larsoft.
 #
 
-declare local_scriptdir="$(dirname "$(readlink -f "${BASH_SOURCE:-$0}")")"
+declare local_scriptdir="$(dirname "$(greadlink -f "${BASH_SOURCE:-$0}")")"
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || SOURCECMD="source"
 $SOURCECMD "${local_scriptdir}/setup" 'runtime' "$@"
 unset local_scriptdir
