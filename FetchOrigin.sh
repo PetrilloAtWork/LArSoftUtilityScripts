@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Fetches all the packages from their "origin" remote repository.
 #

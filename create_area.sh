@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Creates a new working area.
 # Run without parameters for usage instructions.
@@ -202,7 +202,7 @@ else
 	
 	declare local_create_area_test_script="./ExecTest-$$.sh"
 	cat <<-EOS > "$local_create_area_test_script"
-	#!/bin/bash
+	#!/usr/bin/env bash
 	echo "success!"
 	EOS
 	chmod a+x "$local_create_area_test_script"

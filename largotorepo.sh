@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Prints the previous or next directory in the list of GIT repositories
 # in the MRB working area.

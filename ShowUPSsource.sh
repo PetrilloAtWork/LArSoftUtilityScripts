@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Looks for art source matching exactly the suggested patterns,
 # shows them and finally prints their path.

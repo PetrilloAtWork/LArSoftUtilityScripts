@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Prints the build directory matching the current directory
 # (stays here if it's make, goes to BUILD_DIR if it's ninja,

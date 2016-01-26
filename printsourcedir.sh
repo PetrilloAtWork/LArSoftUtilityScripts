@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Prints the source directory matching the current directory
 # (stays here if it's in sourec tree, make,

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Adds the specified repository as a remote source of the local one.
 # 

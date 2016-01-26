@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Runs `mrb uv` and deletes the backup files of the files that were not changed.
 #

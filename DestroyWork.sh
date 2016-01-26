@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Destroy the specified output areas (created by larrun.sh).
 #

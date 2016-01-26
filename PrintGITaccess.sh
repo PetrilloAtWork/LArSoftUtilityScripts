@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Prints the access mode for all the GIT repositories under the specified
 # directory.

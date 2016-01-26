@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Puts all the changes in the current branch in a new feature
 # 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Reruns a command run with larrun.sh version 1.1 or newer.
 #

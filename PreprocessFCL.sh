@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Preprocess a FHICL file with the C preprocessor
 # 

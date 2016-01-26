@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Autodetects and print LArSoft version, qualifiers and experiment.
 # Do not source this script.

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Switches between a source directory and its corresponding build directory.
 # Run without parameters for usage instructions.

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Fetches from the origin repository and rebases to the feature branches.
 # 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Goes to the source directory of the specified package.
 # Run without parameters for usage instructions.

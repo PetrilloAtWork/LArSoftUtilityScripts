@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # This sets up a basic environment for larsoft.
 #
@@ -7,3 +7,4 @@ declare local_scriptdir="$(dirname "$(readlink -f "${BASH_SOURCE:-$0}")")"
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || SOURCECMD="source"
 $SOURCECMD "${local_scriptdir}/setup" 'base' "$@"
 unset local_scriptdir
+
