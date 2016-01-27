@@ -6,7 +6,7 @@
 #
 
 SCRIPTDIR="$(dirname "$0")"
-: ${BASEDIR:="$(dirname "$(readlink -f "$SCRIPTDIR")")"}
+: ${BASEDIR:="$(dirname "$(greadlink -f "$SCRIPTDIR")")"}
 
 SourceDirName='srcs'
 

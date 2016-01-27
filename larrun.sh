@@ -1224,7 +1224,7 @@ if isFlagSet SANDBOX ; then
 	for (( iSource = 0 ; iSource < ${#SourceFiles[@]} ; ++iSource )); do
 		SourceFile="${SourceFiles[iSource]}"
 		if [[ -r "$SourceFile" ]]; then
-			SourceFiles[iSource]="$(readlink -f "$SourceFile")"
+			SourceFiles[iSource]="$(greadlink -f "$SourceFile")"
 		fi
 	done
 	

@@ -76,8 +76,6 @@ function DBGN() {
 } # DBGN()
 function DBG() { DBGN 1 "$*" ; }
 
-alias rl="readlink -f"
-
 
 function StringLength() { echo "${#1}" ; }
 
@@ -118,13 +116,13 @@ function isGITrepository() {
 
 function DetectLocation() {
 	# Prints the MRB location where we are
-	local Cwd="$(readlink -f "$(pwd)")"
+	local Cwd="$(greadlink -f "$(pwd)")"
 	
 	local Mode
 	DBG "Trying to find out where '${Cwd}' is"
 	for Mode in 'SOURCE' 'BUILDDIR' 'INSTALL' 'TOP' ; do
 		local MRBVarName="MRB_${Mode}"
-		local MRBPath="$(readlink -f "${!MRBVarName}")"
+		local MRBPath="$(greadlink -f "${!MRBVarName}")"
 		DBGN 3 "${MRBVarName} => '${MRBPath}' [${Mode}]"
 		if [[ "$Cwd" == "$MRBPath" ]] || [[ "$Cwd" =~ ^${MRBPath}/ ]]; then
 			DBGN 2 "Matched: ${Mode}"

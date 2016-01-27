@@ -100,7 +100,7 @@ isFlagSet FAKE && FAKECMD=echo
 
 trap CleanUp EXIT
 
-FileList="$(readlink -f "$(mktemp "${SCRIPTNAME}-$$.tmpXXXXXX")")"
+FileList="$(greadlink -f "$(mktemp "${SCRIPTNAME}-$$.tmpXXXXXX")")"
 
 for LocalProductDir in "${LocalProductDirs[@]:-"${MRB_INSTALL:-"."}"}" ; do
 	

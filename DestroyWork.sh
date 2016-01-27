@@ -6,7 +6,7 @@
 
 SCRIPTNAME="$(basename "$0")"
 SCRIPTDIR="$(dirname "$0")"
-: ${BASEDIR:="$(dirname "$(readlink -f "$SCRIPTDIR")")"}
+: ${BASEDIR:="$(dirname "$(greadlink -f "$SCRIPTDIR")")"}
 
 : ${DOIT:="0"}
 
