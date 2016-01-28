@@ -208,9 +208,9 @@ function ParseLocalSetup() {
 } # ParseLocalSetup()
 
 function FindLocalProductsDir() {
-	local BaseDir="${MRB_TOP:-"."}"
+	local BaseDir="${1:+$MRB_TOP}"
 	[[ -d "$BaseDir" ]] || return 1
-	for Pattern in "localProducts_${MRB_PROJECT}_" "localProducts_" "localProducts" "localProd" ; do
+	for Pattern in ${MRB_PROJECT:+"localProducts_${MRB_PROJECT}_"} "localProducts_" "localProducts" "localProd" ; do
 		local LocalProductsDir
 		while read LocalProductsDir ; do
 			DBGN 2 "  testing directory '${LocalProductsDir}'"
@@ -236,8 +236,9 @@ function FindLocalProductsDir() {
 } # FindLocalProductsDir()
 
 function ExtractLocalProductsDirParams() {
+   local BaseDir="$1"
 	local LocalProductsDir
-	LocalProductsDir="$(FindLocalProductsDir)"
+	LocalProductsDir="$(FindLocalProductsDir ${BaseDir:+"$BaseDir"})"
 	local res=$?
 	[[ $res != 0 ]] && return $res
 	ParseLocalSetup "${LocalProductsDir}/setup" && return 0
@@ -543,4 +544,3 @@ Output="$(sed "$PLATFORM_SED_REGEXOPT" "s/(^|[^${ItemTag}])${PackageVersionForma
 Output="$(sed "$PLATFORM_SED_REGEXOPT" "s/(^|[^${ItemTag}])${LeadingPackageFormat}/\1${LeadingPackage}/g" <<< "$Output")"
 Output="$(sed "$PLATFORM_SED_REGEXOPT" "s/${ItemTag}${ItemTag}/${ItemTag}/g" <<< "$Output")"
 printf "$Output"
-
