@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Lists all the FCL files whose name matches the specified pattern.
 # 

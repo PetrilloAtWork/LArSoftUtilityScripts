@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Runs make (or equivalent) from the proper directory.
 #
@@ -25,7 +25,7 @@ function isDirUnder() {
 	local ParentDir="$2"
 	[[ -z "$ParentDir" ]] && return 1
 	
-	local FullDir="$(readlink -f "$Dir")"
+	local FullDir="$(greadlink -f "$Dir")"
 	[[ -z "$FullDir" ]] && return 1
 	while [[ ! "$FullDir" -ef "$ParentDir" ]]; do
 		[[ "$FullDir" == '/' ]] && return 1

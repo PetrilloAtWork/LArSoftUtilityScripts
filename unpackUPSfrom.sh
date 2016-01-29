@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Usage:  unpackUPSpackage.sh fetch_script TarballPath [TarballPath ...]
 #

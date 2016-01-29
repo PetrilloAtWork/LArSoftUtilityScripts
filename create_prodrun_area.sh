@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Creates a workikng area based on a production release (no MRB).
 # 

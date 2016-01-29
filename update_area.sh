@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Updates the working area to allow for a new version.
 # Use `update_area.sh --help` for usage instructions.

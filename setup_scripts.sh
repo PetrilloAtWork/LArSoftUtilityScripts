@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Sets some environment for LArSoft scripts
 #
@@ -9,6 +9,10 @@ echo "Setting up LArSoft scripts in '${LARSCRIPTDIR}'"
 export LARSCRIPTDIR
 
 AddToPath PATH "$LARSCRIPTDIR"
+
+if ! type -t greadlink ; then
+	alias greadlink=readlink 
+fi
 
 if [[ -x "${LARSCRIPTDIR}/larswitch.sh" ]]; then
 	function larswitch() { cd "$("${LARSCRIPTDIR}/larswitch.sh" "$@")" ; }

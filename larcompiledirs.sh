@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Tries to make all the subdirectories of the current directory.
 # Stops at the first failure.

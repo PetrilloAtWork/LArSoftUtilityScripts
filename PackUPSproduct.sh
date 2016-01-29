@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Usage:  PackUPSproduct.sh product[@version] [...]
 #

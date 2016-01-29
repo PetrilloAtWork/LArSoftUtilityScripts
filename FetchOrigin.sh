@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Fetches all the packages from their "origin" remote repository.
 #
 
 SCRIPTDIR="$(dirname "$0")"
-: ${BASEDIR:="$(dirname "$(readlink -f "$SCRIPTDIR")")"}
+: ${BASEDIR:="$(dirname "$(greadlink -f "$SCRIPTDIR")")"}
 : ${SRCDIR:="${BASEDIR}/srcs"}
 
 for Dir in "$SRCDIR"/* ; do

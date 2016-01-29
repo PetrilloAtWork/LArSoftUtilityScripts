@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Distributes a command to all the GIT repositories.
 #
@@ -29,7 +29,7 @@ BASESCRIPTVERSION="2.1"
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 
-: ${BASEDIR:="$(dirname "$(readlink -f "$BASESCRIPTDIR")")"}
+: ${BASEDIR:="$(dirname "$(greadlink -f "$BASESCRIPTDIR")")"}
 
 declare -r BeginTag="%"
 declare -r EndTag="%"

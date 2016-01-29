@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Autodetects and print LArSoft version, qualifiers and experiment.
 # Do not source this script.
@@ -25,10 +25,10 @@ RealPackageVersionFormat="${ItemTag}P"
 
 : ${DefaultFormat:="${VersionFormat}\n${QualifiersFormat}\n${ExperimentFormat}\n"}
 
-      UPSformat="${LeadingPackageFormat} ${PackageVersionFormat} -q ${QualifiersFormat}"
+       UPSformat="${LeadingPackageFormat} ${PackageVersionFormat} -q ${QualifiersFormat}"
 LArSoftUPSformat="larsoft ${VersionFormat} -q ${QualifiersFormat}"
-  LocalProdFormat="${PackageVersionFormat}_${QualifiersInPathFormat}"
-        AllFormat="$(cat <<EOM
+ LocalProdFormat="${PackageVersionFormat}_${QualifiersInPathFormat}"
+       AllFormat="$(cat <<EOM
 Experiment:              ${ExperimentFormat}
 LArSoft version:         ${VersionFormat}
 LArSoft qualifiers:      ${QualifiersFormat}
@@ -37,6 +37,16 @@ Leading package version: ${RealPackageVersionFormat}\n
 EOM
 )"
 
+################################################################################
+# platform-specific junk
+case "$(uname)" in
+	( 'Linux' )
+		PLATFORM_SED_REGEXOPT='-r'
+		;;
+	( 'Darwin' )
+		PLATFORM_SED_REGEXOPT='-E'
+		;;
+esac
 ################################################################################
 function help() {
 	cat <<-EOH
@@ -112,11 +122,30 @@ function DBGN() {
 } # DBGN()
 function DBG() { DBGN 1 "$@" ; }
 
+function UpperCaseVariable() {
+	local VarName="$1"
+	if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
+		echo "${!VarName^^}"
+	else
+		tr '[:lower:]' '[:upper:]' <<< "${!VarName}"
+	fi
+} # UpperCaseVariable()
+
+
+function LowerCaseVariable() {
+	local VarName="$1"
+	if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
+		echo "${!VarName,,}"
+	else
+		tr '[:upper:]' '[:lower:]' <<< "${!VarName}"
+	fi
+} # LowerCaseVariable()
+
 
 function ParseLocalProductsDir() {
 	local LPDir="$1"
 	while [[ -h "$LPDir" ]] ; do
-		LPDir="$(readlink "$LPDir")"
+		LPDir="$(greadlink "$LPDir")"
 	done
 	LPDir="$(basename "${LPDir:-$1}")"
 	
@@ -179,9 +208,9 @@ function ParseLocalSetup() {
 } # ParseLocalSetup()
 
 function FindLocalProductsDir() {
-	local BaseDir="${MRB_TOP:-"."}"
+	local BaseDir="${1:+$MRB_TOP}"
 	[[ -d "$BaseDir" ]] || return 1
-	for Pattern in "localProducts_${MRB_PROJECT}_" "localProducts_" "localProducts" "localProd" ; do
+	for Pattern in ${MRB_PROJECT:+"localProducts_${MRB_PROJECT}_"} "localProducts_" "localProducts" "localProd" ; do
 		local LocalProductsDir
 		while read LocalProductsDir ; do
 			DBGN 2 "  testing directory '${LocalProductsDir}'"
@@ -207,8 +236,9 @@ function FindLocalProductsDir() {
 } # FindLocalProductsDir()
 
 function ExtractLocalProductsDirParams() {
+   local BaseDir="$1"
 	local LocalProductsDir
-	LocalProductsDir="$(FindLocalProductsDir)"
+	LocalProductsDir="$(FindLocalProductsDir ${BaseDir:+"$BaseDir"})"
 	local res=$?
 	[[ $res != 0 ]] && return $res
 	ParseLocalSetup "${LocalProductsDir}/setup" && return 0
@@ -378,14 +408,14 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 	declare LArSoftQualifiersTry=""
 	while [[ "$LocalDir" != "/" ]]; do
 		declare DirName="$(basename "$LocalDir")"
-		declare DirRealName="$(basename "$(readlink "$LocalDir")")"
+		declare DirRealName="$(basename "$(greadlink -f "$LocalDir")")"
 		
 		DBGN 2 "  '${DirName}'${DirRealName:+" ( => '${DirRealName}'")}..."
 		
 		# experiment?
 		if [[ -z "$ExperimentTry" ]]; then
 			for TestName in "$DirName" "$DirRealName" ; do
-				case "${TestName^^}" in
+				case "$(UpperCaseVariable TestName)" in
 					( 'DUNE' | 'LBNE' )
 						ExperimentTry='DUNE'
 						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
@@ -477,7 +507,7 @@ fi
 : ${LArSoftQualifiers:="$DefaultLArSoftQualifiers"}
 : ${Experiment:="$DefaultExperiment"}
 
-case "${Experiment,,}" in
+case "$(LowerCaseVariable Experiment)" in
 	( 'auto' | 'autodetect' | '' )
 		;;
 	( 'lbne' | 'dune' )
@@ -510,13 +540,14 @@ esac
 declare RealLeadingPackageVersion="$(FindPackageVersion "$LeadingPackage" "$LArSoftVersion")"
 declare LeadingPackageVersion=${RealLeadingPackageVersion:-${LArSoftVersion}}
 
+DBGN 2 "Formatting: '${Format}'"
 declare Output="$Format"
-Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${VersionFormat}/\1${LArSoftVersion}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${QualifiersFormat}/\1${LArSoftQualifiers//_/:}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${QualifiersInPathFormat}/\1${LArSoftQualifiers//:/_}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${ExperimentFormat}/\1${Experiment}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${RealPackageVersionFormat}/\1${RealLeadingPackageVersion}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${PackageVersionFormat}/\1${LeadingPackageVersion}/g" <<< "$Output")"
-Output="$(sed -e "s/\(^\|[^${ItemTag}]\)${LeadingPackageFormat}/\1${LeadingPackage}/g" <<< "$Output")"
-Output="$(sed -e "s/${ItemTag}${ItemTag}/${ItemTag}/g" <<< "$Output")"
+Output="$(sed "$PLATFORM_SED_REGEXOPT" "s/(^|[^${ItemTag}])${VersionFormat}/\1${LArSoftVersion}/g" <<< "$Output")"
+Output="$(sed "$PLATFORM_SED_REGEXOPT" "s/(^|[^${ItemTag}])${QualifiersFormat}/\1${LArSoftQualifiers//_/:}/g" <<< "$Output")"
+Output="$(sed "$PLATFORM_SED_REGEXOPT" "s/(^|[^${ItemTag}])${QualifiersInPathFormat}/\1${LArSoftQualifiers//:/_}/g" <<< "$Output")"
+Output="$(sed "$PLATFORM_SED_REGEXOPT" "s/(^|[^${ItemTag}])${ExperimentFormat}/\1${Experiment}/g" <<< "$Output")"
+Output="$(sed "$PLATFORM_SED_REGEXOPT" "s/(^|[^${ItemTag}])${RealPackageVersionFormat}/\1${RealLeadingPackageVersion}/g" <<< "$Output")"
+Output="$(sed "$PLATFORM_SED_REGEXOPT" "s/(^|[^${ItemTag}])${PackageVersionFormat}/\1${LeadingPackageVersion}/g" <<< "$Output")"
+Output="$(sed "$PLATFORM_SED_REGEXOPT" "s/(^|[^${ItemTag}])${LeadingPackageFormat}/\1${LeadingPackage}/g" <<< "$Output")"
+Output="$(sed "$PLATFORM_SED_REGEXOPT" "s/${ItemTag}${ItemTag}/${ItemTag}/g" <<< "$Output")"
 printf "$Output"

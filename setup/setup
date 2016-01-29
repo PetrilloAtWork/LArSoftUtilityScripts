@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # This sets up a MRB working area for LArSoft, according to the specified mode.
 # 
@@ -14,8 +14,8 @@
 # - 'all': full development setup, to develop and run in the same area
 #
 
-function IsInList() {
-	# Usage:  IsInList Key [Item ...]
+function _IsInList() {
+	# Usage:  _IsInList Key [Item ...]
 	# Returns 0 if the key is one of the other specified items
 	local Key="$1"
 	shift
@@ -24,11 +24,11 @@ function IsInList() {
 		[[ "$Item" == "$Key" ]] && return 0
 	done
 	return 1
-} # IsInList()
+} # _IsInList()
 
 
-function SortUPSqualifiers() {
-	# Usage:  SortUPSqualifiers  Qualifiers [Separator]
+function _SortUPSqualifiers() {
+	# Usage:  _SortUPSqualifiers  Qualifiers [Separator]
 	# sorts the specified qualifiers (colon separated by default)
 	# The current sorting is: alphabetically, but move debug/opt/prof to the end
 	local qual="$1"
@@ -38,7 +38,7 @@ function SortUPSqualifiers() {
 	local -ar AllSpecials=( 'prof' 'opt' 'debug' )
 	local -a Specials
 	for item in $(tr "$sep" '\n' <<< "$qual" | sort) ; do
-		if IsInList "$item" "${AllSpecials[@]}" ; then
+		if _IsInList "$item" "${AllSpecials[@]}" ; then
 			Specials=( "${Specials[@]}" "$item" )
 			continue
 		fi
@@ -52,144 +52,161 @@ function SortUPSqualifiers() {
 	done
 	echo
 	return 0
-} # SortUPSqualifiers()
+} # _SortUPSqualifiers()
 
 
-################################################################################
-###
-### find the elemental setup script; without it we are lost
-###
-declare local_scriptdir="$(dirname "$(readlink -f "${BASH_SOURCE:-$0}")")"
-if [[ ! -f "${local_scriptdir}/plain_setup" ]]; then
-	echo "Can't find the elemental setup script '${local_scriptdir}/plain_setup', no setup is possible." >&2
-	return 2
-fi
-
-function local_setup_element() {
-	source "${local_scriptdir}/plain_setup" "$1" "$local_setup_version" "$local_setup_qual" "$local_setup_experiment" "$local_setup_package"  "$local_setup_package_version"
+function _setup_element() {
+	# SCRIPTDIR and the setup_XXX variables are local variables of the calling function
+	source "${SCRIPTDIR}/plain_setup" "$1" "$setup_version" "$setup_qual" "$setup_experiment" "$setup_package"  "$setup_package_version"
 }
 
-###
-### Autodetection of the working area features
-###
 
-declare -a local_setup_autodetection
-declare local_setup_autodetection_script="$(which 'autodetectLArSoft.sh' >& /dev/null)"
-[[ -x "$local_setup_autodetection_script" ]] || local_setup_autodetection_script="${local_scriptdir}/autodetectLArSoft.sh"
-[[ -x "$local_setup_autodetection_script" ]] || local_setup_autodetection_script="$(dirname "$local_scriptdir")/autodetectLArSoft.sh"
-if [[ -x "$local_setup_autodetection_script" ]] ; then
-	local_setup_autodetection=( $("$local_setup_autodetection_script" -v -q -e -L -p "nightly" "debug:e5" "LArSoft") )
-else
-	echo "Autodetection skipped." >&2
-	local_setup_autodetection=( "" "debug:e5" "LArSoft" 'larsoft' "" )
-fi
-unset local_setup_autodetection_script
+function DoSetup_LArSoft() {
+	local SCRIPTPATH="${BASH_SOURCE[0]}"
 
-###
-### Override by the command line parameters
-###
-declare local_setup_mode="$(tr '[:upper:]' '[:lower:]' <<< "${1:-all}")"
-case "$local_setup_mode" in
-	( 'base' | 'develop' | 'runtime' | 'all' | 'prod' ) ;;
-	( 'step_'* ) ;;
-	( * ) local_setup_mode='all' ;;
-esac
-
-declare local_setup_version="${2:-${local_setup_autodetection[0]}}"
-declare local_setup_qual="${3:-${local_setup_autodetection[1]}}"
-declare local_setup_experiment="${4:-${local_setup_autodetection[2]}}"
-declare local_setup_package="${local_setup_autodetection[3]:-'larsoft'}"
-declare local_setup_package_version="${local_setup_autodetection[4]:-${local_setup_version}}"
-unset local_setup_autodetection
-
-###
-### fill in the needed parameters
-###
-local_setup_qual="$(SortUPSqualifiers "${local_setup_qual//_/:}")"
-unset -f SortUPSqualifiers IsInList
-
-###
-### if not sourced, just print what would happen
-###
-if [[ "$(basename -- "${BASH_SOURCE[0]}")" == "$(basename -- "$0")" ]]; then
+	################################################################################
+	###
+	### find the elemental setup script; without it we are lost
+	###
+	local SCRIPTDIR="$(dirname "$SCRIPTPATH")"
+	if [[ "$SCRIPTDIR" == '.' ]]; then
+		SCRIPTDIR="$(pwd)"
+	elif [[ "${SCRIPTDIR:0:1}" != '/' ]]; then
+		SCRIPTDIR="$(pwd)${SCRIPTDIR:+/${SCRIPTDIR}}"
+	fi
+	if [[ ! -f "${SCRIPTDIR}/plain_setup" ]]; then
+		echo "Can't find the elemental setup script '${SCRIPTDIR}/plain_setup', no setup is possible." >&2
+		return 2
+	fi
 	
-	declare local_setup_script="$(local_setup_element 'printlocalproductsscript')"
+	local -i nOutput=0
+	###
+	### Autodetection of the working area features
+	###
 	
-	cat <<-EOM
-	Setup type:              ${local_setup_mode}
-	Experiment:              ${local_setup_experiment}
-	LArSoft version:         ${local_setup_version}
-	LArSoft qualifiers:      ${local_setup_qual}
-	Local product setup:    '${local_setup_script}'
-	Leading package:         ${local_setup_package}
-	Leading package version: ${local_setup_package_version}
-	EOM
+	local -a setup_autodetection
+	local setup_autodetection_script="$(which 'autodetectLArSoft.sh' 2> /dev/null)"
+	[[ -x "$setup_autodetection_script" ]] || setup_autodetection_script="${SCRIPTDIR}/autodetectLArSoft.sh"
+	[[ -x "$setup_autodetection_script" ]] || setup_autodetection_script="$(dirname "$SCRIPTDIR")/autodetectLArSoft.sh"
+	if [[ -x "$setup_autodetection_script" ]] ; then
+		setup_autodetection=( $("$setup_autodetection_script" -v -q -e -L -p "nightly" "debug:e5" "LArSoft") )
+	else
+		echo "Autodetection skipped." >&2
+		setup_autodetection=( "" "debug:e5" "LArSoft" 'larsoft' "" )
+	fi
 	
-	echo "This script needs to be sourced." >&2
-	exit 1
-fi
+	###
+	### Override by the command line parameters
+	###
+	local setup_mode="$(tr '[:upper:]' '[:lower:]' <<< "${1:-all}")"
+	case "$setup_mode" in
+		( 'base' | 'develop' | 'runtime' | 'all' | 'prod' ) ;;
+		( 'step_'* ) ;;
+		( * ) setup_mode='all' ;;
+	esac
+	
+	local setup_version="${2:-${setup_autodetection[0]}}"
+	local setup_qual="${3:-${setup_autodetection[1]}}"
+	local setup_experiment="${4:-${setup_autodetection[2]}}"
+	local setup_package="${setup_autodetection[3]:-'larsoft'}"
+	local setup_package_version="${setup_autodetection[4]:-${setup_version}}"
+	
+	###
+	### fill in the needed parameters
+	###
+	setup_qual="$(_SortUPSqualifiers "${setup_qual//_/:}")"
+	
+	###
+	### if not sourced, just print what would happen
+	###
+	if [[ "$(basename -- "$SCRIPTPATH")" == "$(basename -- "$0")" ]]; then
+		
+		local setup_script="$(_setup_element 'printlocalproductsscript')"
+		
+		cat <<-EOM
+		Setup type:              ${setup_mode}
+		Experiment:              ${setup_experiment}
+		LArSoft version:         ${setup_version}
+		LArSoft qualifiers:      ${setup_qual}
+		Local product setup:    '${setup_script}'
+		Leading package:         ${setup_package}
+		Leading package version: ${setup_package_version}
+		EOM
+		
+		echo "This script needs to be sourced." >&2
+		exit 1
+	fi
+	
+	if [[ -z "$setup_version" ]]; then
+		echo "I don't know which LArSoft version to set up!" >&2
+		return 1
+	fi
+	
+	
+	local -i setup_myErrors=0
+	
+	# this will be used, if present, by the elemental setup script
+	local -i setup_nOutput=0
+	
+	###
+	### base setup (all modes)
+	###
+	case "$setup_mode" in
+		( 'base' | 'runtime' | 'develop' | 'prod' | 'all' | 'step_base' )
+			_setup_element 'base' || let ++setup_myErrors
+			;;
+		( * ) ;;
+	esac
+	
+	###
+	### local products UPS setup (all modes except base)
+	###
+	case "$setup_mode" in
+		( 'runtime' | 'develop' | 'all' | 'step_localproducts' )
+			_setup_element 'localproducts' || let ++setup_myErrors
+			;;
+		( * ) ;;
+	esac
+	
+	###
+	### LArSoft setup (runtime and "all" modes)
+	###
+	case "$setup_mode" in
+		( 'runtime' | 'prod' | 'all' | 'step_larsoft' )
+			_setup_element 'larsoft' || let ++setup_myErrors
+			;;
+		( * ) ;;
+	esac
+	
+	###
+	### build environment setup
+	###
+	case "$setup_mode" in
+		( 'develop' | 'all' | 'step_build' )
+			_setup_element 'build' || let ++setup_myErrors
+			;;
+		( * ) ;;
+	esac
+	
+	
+	###
+	### wrap up, clean and say goodbye
+	###
+	if [[ $setup_myErrors -gt 0 ]]; then
+		echo "Set up (${setup_mode}) incomplete."
+		return 1
+	fi
+	echo "Set up (${setup_mode}) complete."
+	return 0
+} # DoSetup_LArSoft()
 
-if [[ -z "$local_setup_version" ]]; then
-	echo "I don't know which LArSoft version to set up!" >&2
-	return 1
-fi
+function DoSetup_LArSoft_Wrapper() {
+	DoSetup_LArSoft "$@"
+	local -i res=$?
+	unset -f DoSetup_LArSoft DoSetup_LArSoft_Wrapper _setup_element _SortUPSqualifiers _IsInList
+	return $res
+} # DoSetup_LArSoft_Wrapper()
 
 
-declare -i local_setup_myErrors=0
+DoSetup_LArSoft_Wrapper "$@"
 
-# this will be used, if present, by the elemental setup script
-declare -i local_setup_nOutput=0
-
-###
-### base setup (all modes)
-###
-case "$local_setup_mode" in
-	( 'base' | 'runtime' | 'develop' | 'prod' | 'all' | 'step_base' )
-		local_setup_element 'base' || let ++local_setup_myErrors
-		;;
-	( * ) ;;
-esac
-
-###
-### local products UPS setup (all modes except base)
-###
-case "$local_setup_mode" in
-	( 'runtime' | 'develop' | 'all' | 'step_localproducts' )
-		local_setup_element 'localproducts' || let ++local_setup_myErrors
-		;;
-	( * ) ;;
-esac
-
-###
-### LArSoft setup (runtime and "all" modes)
-###
-case "$local_setup_mode" in
-	( 'runtime' | 'prod' | 'all' | 'step_larsoft' )
-		local_setup_element 'larsoft' || let ++local_setup_myErrors
-		;;
-	( * ) ;;
-esac
-
-###
-### build environment setup
-###
-case "$local_setup_mode" in
-	( 'develop' | 'all' | 'step_build' )
-		local_setup_element 'build' || let ++local_setup_myErrors
-		;;
-	( * ) ;;
-esac
-
-
-###
-### wrap up, clean and say goodbye
-###
-unset -f local_setup_element
-if [[ $local_setup_myErrors -gt 0 ]]; then
-	echo "Set up (${local_setup_mode}) incomplete."
-	unset local_setup_mode local_setup_myErrors
-	return 1
-fi
-echo "Set up (${local_setup_mode}) complete."
-unset local_setup_mode local_setup_myErrors
-return 0

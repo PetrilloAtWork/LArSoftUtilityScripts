@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Fetches from the origin repository and rebases to the feature branches.
 # 
@@ -18,7 +18,7 @@
 SCRIPTDIR="$(dirname "$0")"
 VERSION="1.1"
 
-: ${BASEDIR:="$(dirname "$(readlink -f "$SCRIPTDIR")")"}
+: ${BASEDIR:="$(dirname "$(greadlink -f "$SCRIPTDIR")")"}
 : ${RepoAlias:="origin"}
 
 SourceDirName='srcs'

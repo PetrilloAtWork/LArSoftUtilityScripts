@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # This is just a wrapper to ShowUPSsource.sh that tries to guess
 # the package name from its own name.

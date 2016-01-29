@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Converts all the .prof files it finds to callgrind format (assuming lar as executable)
 #

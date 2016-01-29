@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Prints the build directory matching the current directory
 # (stays here if it's make, goes to BUILD_DIR if it's ninja,
@@ -27,7 +27,7 @@ function isDirUnder() {
 	local ParentDir="$2"
 	[[ -z "$ParentDir" ]] && return 1
 	
-	local FullDir="$(readlink -f "$Dir")"
+	local FullDir="$(greadlink -f "$Dir")"
 	[[ -z "$FullDir" ]] && return 1
 	while [[ ! "$FullDir" -ef "$ParentDir" ]]; do
 		[[ "$FullDir" == '/' ]] && return 1

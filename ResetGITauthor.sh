@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 UserName="${1:-"Gianluca Petrillo"}"
 Email="${2:-"petrillo@fnal.gov"}"

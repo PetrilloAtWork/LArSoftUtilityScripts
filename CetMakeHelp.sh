@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Convenience alias to open a art or cetbuildtools CMake macro file
 #
