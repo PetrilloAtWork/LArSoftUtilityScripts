@@ -11,7 +11,9 @@ export LARSCRIPTDIR
 AddToPath PATH "$LARSCRIPTDIR"
 
 if ! type -t greadlink ; then
-	alias greadlink=readlink 
+	# aliases are not expanded in non-interactive shells, so let's use a function
+	function greadlink() { readlink "$@" ; }
+	export -f greadlink 
 fi
 
 if [[ -x "${LARSCRIPTDIR}/larswitch.sh" ]]; then
