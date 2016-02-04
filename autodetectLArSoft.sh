@@ -208,7 +208,7 @@ function ParseLocalSetup() {
 } # ParseLocalSetup()
 
 function FindLocalProductsDir() {
-	local BaseDir="${1:+$MRB_TOP}"
+	local BaseDir="${1:-$MRB_TOP}"
 	[[ -d "$BaseDir" ]] || return 1
 	for Pattern in ${MRB_PROJECT:+"localProducts_${MRB_PROJECT}_"} "localProducts_" "localProducts" "localProd" ; do
 		local LocalProductsDir
@@ -236,7 +236,7 @@ function FindLocalProductsDir() {
 } # FindLocalProductsDir()
 
 function ExtractLocalProductsDirParams() {
-   local BaseDir="$1"
+	local BaseDir="$1"
 	local LocalProductsDir
 	LocalProductsDir="$(FindLocalProductsDir ${BaseDir:+"$BaseDir"})"
 	local res=$?
@@ -496,7 +496,7 @@ if [[ -z "$Experiment" ]]; then
 	DBGN 1 "Experiment forcibly set to: '${Experiment}'"
 fi
 
-LocalProductsDirInfo=( $(ExtractLocalProductsDirParams "$MRB_TOP" ) )
+LocalProductsDirInfo=( $(ExtractLocalProductsDirParams "${MRB_TOP:-.}" ) )
 if [[ $? == 0 ]]; then
 	LArSoftVersion="${LocalProductsDirInfo[0]}"
 	LArSoftQualifiers="${LocalProductsDirInfo[1]}"
