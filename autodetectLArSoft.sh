@@ -488,6 +488,8 @@ if [[ -z "$Experiment" ]]; then
 		Experiment="DUNE"
 	elif [[ -d "/lar1nd" ]] || [[ -d "/sbnd" ]]; then
 		Experiment="SBND"
+	elif [[ -d "/lariat" ]]; then
+		Experiment="LArIAT"
 	elif [[ -d "/uboone" ]]; then
 		Experiment="MicroBooNE"
 	else
