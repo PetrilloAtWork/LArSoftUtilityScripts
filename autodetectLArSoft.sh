@@ -401,16 +401,19 @@ DBGN 2 "Setup directory: '${SetupDir}'"
 ###
 ### parse the current path, looking for experiment, LArSoft version and qualifiers
 ###
+declare ExperimentBest LArSoftVersionBest LArSoftQualifiersBest
+declare -i ScoreBest=0
 for LocalDir in "$(pwd)" "$SetupDir" ; do
 	DBGN 1 "Extracting information from path: '${LocalDir}'"
 	declare ExperimentTry=""
 	declare LArSoftVersionTry=""
 	declare LArSoftQualifiersTry=""
+	declare -i ScoreTry=0
 	while [[ "$LocalDir" != "/" ]]; do
 		declare DirName="$(basename "$LocalDir")"
 		declare DirRealName="$(basename "$(greadlink -f "$LocalDir")")"
 		
-		DBGN 2 "  '${DirName}'${DirRealName:+" ( => '${DirRealName}'")}..."
+		DBGN 2 "  '${DirName}'${DirRealName:+" ( => '${DirRealName}')"}..."
 		
 		# experiment?
 		if [[ -z "$ExperimentTry" ]]; then
@@ -418,16 +421,19 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 				case "$(UpperCaseVariable TestName)" in
 					( 'DUNE' | 'LBNE' )
 						ExperimentTry='DUNE'
+						let ScoreTry+=1
 						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
 						continue 2
 						;;
 					( 'LAR1ND' | 'SBND' )
 						ExperimentTry='SBND'
+						let ScoreTry+=1
 						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
 						continue 2
 						;;
 					( 'UBOONE' | 'MICROBOONE' )
 						ExperimentTry='MicroBooNE'
+						let ScoreTry+=1
 						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
 						continue 2
 						;;
@@ -442,6 +448,7 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 				case "$TestName" in
 					( 'develop' | 'master' | 'nightly' )
 						LArSoftVersionTry="$TestName"
+						let ScoreTry+=2
 						DBGN 1 "  => LArSoft version might be: '${LArSoftVersionTry}'"
 						continue 2
 						;;
@@ -449,6 +456,7 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 				# version pattern
 				if [[ "$TestName" =~ v[[:digit:]]+_[[:digit:]]+(_[[:digit:]]+)?$ ]]; then
 					LArSoftVersionTry="$TestName"
+					let ScoreTry+=2
 					DBGN 1 "  => LArSoft version might be: '${LArSoftVersionTry}' (matches pattern)"
 					continue 2
 				fi
@@ -460,6 +468,7 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 			for TestName in "$DirName" "$DirRealName" ; do
 				if tr ':_' '\n' <<< "$TestName" | grep -q -w -e 'debug' -e 'prof' -e 'opt' ; then
 					LArSoftQualifiersTry="${TestName//_/:}"
+					let ScoreTry+=2
 					DBGN 1 "  => qualifiers might be: '${LArSoftQualifiersTry}' (matches pattern)"
 					continue 2
 				fi
@@ -470,17 +479,21 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 	done
 	unset TestName DirRealName
 	
-	if [[ -n "$ExperimentTry" ]] && [[ -n "$LArSoftVersionTry" ]] && [[ -n "$LArSoftQualifiersTry" ]]; then
-		break
+	if [[ $ScoreTry -gt $ScoreBest ]]; then
+		ExperimentBest="$ExperimentTry"
+		LArSoftVersionBest="$LArSoftVersionTry"
+		LArSoftQualifiersBest="$LArSoftQualifiersTry"
+		ScoreBest="$ScoreTry"
 	fi
 done
+
 # if the experiment hasn't been found, never mind
-if [[ -n "$LArSoftVersionTry" ]] && [[ -n "$LArSoftQualifiersTry" ]]; then
-	: ${Experiment:="$ExperimentTry"}
-	: ${LArSoftVersion:="$LArSoftVersionTry"}
-	: ${LArSoftQualifiers:="$LArSoftQualifiersTry"}
+if [[ -n "$LArSoftVersionBest" ]] && [[ -n "$LArSoftQualifiersBest" ]]; then
+	: ${Experiment:="$ExperimentBest"}
+	: ${LArSoftVersion:="$LArSoftVersionBest"}
+	: ${LArSoftQualifiers:="$LArSoftQualifiersBest"}
 fi
-unset ExperimentTry LArSoftVersionTry LArSoftQualifiersTry
+unset {Experiment,LArSoftVersion,LArSoftQualifiers}{Try,Best}
 
 # still nothing, try to autodetect from the mounted directories
 if [[ -z "$Experiment" ]]; then
