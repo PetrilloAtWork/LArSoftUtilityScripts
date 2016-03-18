@@ -40,6 +40,18 @@ if [[ -x "${LARSCRIPTDIR}/largotorepo.sh" ]]; then
 	function prevrepo() { gotorepo -${1:-1} ; }
 fi
 
+if [[ -r "${LARSCRIPTDIR}/setup" ]]; then
+	function setup_LArSoft() {
+		local Target="${1:-base}"
+		local SetupScript="${LARSCRIPTDIR}/setup/${Target}"
+		if [[ ! -r "$SetupScript" ]]; then
+			echo "ERROR: no LArSoft setup for '${Target}'" >&2
+			return 2
+		fi
+		source "$SetupScript"
+	} # setup_LArSoft()
+fi
+
 function goninja() {
 	pushd "$MRB_BUILDDIR" > /dev/null
 	ninja "$@"
