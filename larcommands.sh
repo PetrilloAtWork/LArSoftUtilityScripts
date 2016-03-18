@@ -20,11 +20,13 @@
 #   colouring the repository name by default
 # 20151023 (petrillo@fnal.gov) [v2.2]
 #   long help messages are paged via $PAGER
+# 20160315 (petrillo@fnal.gov) [v2.3]
+#   added option to override source directory
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
 BASESCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-BASESCRIPTVERSION="2.1"
+BASESCRIPTVERSION="2.3"
 
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
@@ -120,6 +122,8 @@ function help_baseoptions() {
 	    skips the repositories whose name matches the specified REGEX
 	
 	Other options:
+	--source=SOURCEDIR [from MRB_SOURCES; now: '${mrb_SOURCES}']
+	    use SOURCEDIR as base source directory
 	--compact[=MODE]
 	    do not write the git command; out the output of the command according to
 	    MODE:
@@ -490,6 +494,37 @@ function MatchTag() {
 	DBGN 2 "  no tag matched"
 	return 1
 } # MatchTag()
+
+
+function DetectSourceDir() {
+	local SourceDir="$1"
+	while true ; do
+		# if we have a suggestion, we indiscriminately follow it
+		[[ -n "$SourceDir" ]] && break
+		
+		# if the detected base directory has a 'srcs' directory, that's it
+		local BaseDir="$BASEDIR"
+		
+		SourceDir="${BaseDir}/srcs"
+		[[ -d "$SourceDir" ]] && break
+	
+		# go through all base directory path to see if there is a 'srcs'
+		# subdirectory in any of the parent directories	
+		BaseDir="$(pwd)"
+		while [[ ! -d "${BaseDir}/srcs" ]] && [[ "$BaseDir" != '/' ]]; do
+			BaseDir="$(dirname "$BaseDir")"
+		done
+		SourceDir="${BaseDir}/srcs"
+		[[ -d "$SourceDir" ]] && break
+		
+		# Bah. Stick to the current directory.
+		SourceDir='.'
+		break
+	done
+	echo "$SourceDir"
+	[[ -d "$SourceDir" ]]
+	return
+} # DetectSourceDir()
 
 
 function ReplaceTag() {
@@ -919,6 +954,9 @@ function StandardOptionParser() {
 		( '--autodetect-command' )
 			AutodetectCommand=1
 			;;
+		( '--source='* )
+			SourceDir="${Param#--*=}"
+			;;
 		( '--ifcurrentbranch='* )
 			OnlyIfCurrentBranches=( "${OnlyIfCurrentBranches[@]}" "${Param#--*=}" )
 			;;
@@ -1091,18 +1129,7 @@ fi
 ################################################################################
 ### get to the right directory
 ### 
-if [[ ! -d "${BASEDIR}/srcs" ]]; then
-	BASEDIR="$(pwd)"
-	while [[ ! -d "${BASEDIR}/srcs" ]] && [[ "$BASEDIR" != '/' ]]; do
-		BASEDIR="$(dirname "$BASEDIR")"
-	done
-fi
-
-if [[ ! -d "${BASEDIR}/srcs" ]]; then
-	: ${SRCDIR:="."}
-else
-	: ${SRCDIR:="${BASEDIR}/srcs"}
-fi
+SRCDIR="$(DetectSourceDir "$SourceDir")"
 DBGN 2 "Source directory: '${SRCDIR}'"
 
 ################################################################################
