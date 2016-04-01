@@ -22,6 +22,8 @@
 #   long help messages are paged via $PAGER
 # 20160315 (petrillo@fnal.gov) [v2.3]
 #   added option to override source directory
+# 20160329 (petrillo@fnal.gov)
+#   bug fixed: replacement of commands with multiple tags
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
@@ -567,7 +569,9 @@ function ExpandTag() {
 	LASTFATAL "No tag supports '${BeginTag}${Tag}${EndTag}'."
 	
 	local -a ExpandedTag
+	DBGN 5 "    ReplaceTag '${Tag}' '${TagKey}'"
 	eval "ExpandedTag=( $( ReplaceTag "$Tag" "$TagKey" ) )"
+	DBGN 6 "    => ${ExpandedTag[@]}"
 	
 	ExpandArguments "${ExpandedTag[@]}"
 	
@@ -594,14 +598,24 @@ function ExpandArgument() {
 		local Tag="${BASH_REMATCH[2]}" # that's the stuff matched in parentheses
 		local PostTag="${BASH_REMATCH[3]}"
 		
+		DBGN 6 "    (identified '${PreTag}' <${BeginTag}${Tag}${EndTag}> '${PostTag}'"
+		
 		local -a ExpandedTags
 		eval "ExpandedTags=( $(ExpandTag "$Tag") )"
+		
+		# recursive expansion of part of the argument after the tag we deal with
+		local -a ExpandedPreTags
+		eval "ExpandedPreTags=( $(ExpandArgument "$PreTag") )"
 		
 		local -a DressedTags
 		local ExpandedTag
 		for ExpandedTag in "${ExpandedTags[@]}" ; do
-			DressedTags=( "${DressedTags[@]}" "${PreTag}${ExpandedTag}${PostTag}" )
+			local ExpandedPreTag
+			for ExpandedPreTag in "${ExpandedPreTags[@]}" ; do
+				DressedTags=( "${DressedTags[@]}" "${ExpandedPreTag}${ExpandedTag}${PostTag}" )
+			done
 		done
+		
 		ReturnNamedArray DressedTags
 	else
 		# argument is just a literal; just return it
