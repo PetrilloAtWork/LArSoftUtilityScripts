@@ -8,22 +8,41 @@ LARSCRIPTDIR="$(dirname "$BASH_SOURCE")"
 echo "Setting up LArSoft scripts in '${LARSCRIPTDIR}'"
 export LARSCRIPTDIR
 
-AddToPath PATH "$LARSCRIPTDIR"
+###############################################################################
+###
+###
+if declare -F AddToPath >& /dev/null ; then
+	AddToPath PATH "$LARSCRIPTDIR"
+else
+	PATH+=":${LARSCRIPTDIR}"
+fi
 
+###############################################################################
+### greadlink
+###
 if ! type -t greadlink > /dev/null ; then
 	# aliases are not expanded in non-interactive shells, so let's use a function
 	function greadlink() { readlink "$@" ; }
 	export -f greadlink 
 fi
 
+###############################################################################
+### larswitch
+###
 if [[ -x "${LARSCRIPTDIR}/larswitch.sh" ]]; then
 	function larswitch() { cd "$("${LARSCRIPTDIR}/larswitch.sh" "$@")" ; }
 fi
 
+###############################################################################
+### FindFCL
+###
 if [[ -x "${LARSCRIPTDIR}/FindInPath.sh" ]]; then
 	alias FindFCL="${LARSCRIPTDIR}/FindInPath.sh --fcl"
 fi
 
+###############################################################################
+### gotorepo , nextrepo , prevrepo
+###
 if [[ -x "${LARSCRIPTDIR}/largotorepo.sh" ]]; then
 	function gotorepo() {
 		local DirName
@@ -40,6 +59,9 @@ if [[ -x "${LARSCRIPTDIR}/largotorepo.sh" ]]; then
 	function prevrepo() { gotorepo -${1:-1} ; }
 fi
 
+###############################################################################
+### setup_LArSoft , setup_as_LArSoft, setup_as
+###
 if [[ -r "${LARSCRIPTDIR}/setup" ]]; then
 	function setup_LArSoft() {
 		local Target="${1:-base}"
@@ -103,6 +125,9 @@ function setup_as() {
 } # setup_as()
 
 
+###############################################################################
+### goninja
+###
 function goninja() {
 	pushd "$MRB_BUILDDIR" > /dev/null
 	ninja "$@"

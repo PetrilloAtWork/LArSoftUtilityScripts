@@ -18,6 +18,20 @@ function FATAL() {
 	exit $Code
 } # FATAL()
 
+function isDebugging() {
+	local Level="${1:-1}"
+	[[ -n "$DEBUG" ]] && [[ "$DEBUG" -ge "$Level" ]]
+} # isDebugging()
+
+function DBGN() {
+	locali -i Level="$1"
+	isDebugging "$Level" || return
+	shift
+	STDERR "DBG[${Level}] $*"
+} # DBGN()
+function DBG() { DBG 1 "$@" ; }
+
+
 function isDirUnder() {
 	# Usage:  isDirUnder Dir ParentDir
 	# returns success if Dir is a subdirectory of ParentDir
@@ -71,8 +85,10 @@ function isBuildArea() {
 
 BuildDir="$CWD"
 if ! isBuildArea "$BuildDir" ; then
+	DBGN 2 "Current directory is not a building area."
 	if isSourceArea "$BuildDir" ; then
-		BuildDir="$($SwitchScript)"
+		DBGN 2 "Current directory is ai source area: switching."
+		BuildDir="$($SwitchScript ${DEBUG:+--debug="$DEBUG"})"
 		[[ $? == 0 ]] || BuildDir="$CWD"
 	fi
 fi

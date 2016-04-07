@@ -31,6 +31,8 @@ function help() {
 	    * otherwise: prints an error message, then source directory
 	--quiet , -q
 	    don't print any error message
+	--debug[=LEVEL] , -d
+	    sets the verbosity level (if no level is specified, level 1 is set)
 	
 	EOH
 } # help()
@@ -54,6 +56,49 @@ function LASTFATAL() {
 	[[ "$Code" != 0 ]] && FATAL "$Code""$@"
 } # LASTFATAL()
 
+function isDebugging() {
+	local -i Level="${1:-1}"
+	[[ -n "$DEBUG" ]] && [[ "$DEBUG" -ge "$Level" ]]
+} # isDebugging()
+
+function DBGN() {
+	local -i Level="$1"
+	shift
+	isDebugging && STDERR "DBG[${Level}] $*"
+} # DBGN()
+function DBG() { DBGN 1 "$@" ; }
+
+
+function isInPath() {
+	# isInPath  Path BasePath
+	# succeeds if Path is under BasePath, in which case also prints
+	# the part of Path that exceeds BasePath
+	local Path="$1"
+	local BasePath="$2"
+	local CWD="$(pwd)"
+	
+	[[ -z "$Path" ]] && return 1
+	[[ -z "$BasePath" ]] && return 1
+	[[ "${Path:0:1}" == '/' ]] || Path="${CWD%/}/${Path}"
+	[[ "${BasePath:0:1}" == '/' ]] || BasePath="${CWD%/}/${Path}"
+	
+	local StartPath="$Path"
+	DBGN 3 "Does '${Path}' live under '${BasePath}'?"
+	while [[ "$Path" != '/' ]]; do
+		DBGN 4 "  - testing: '${Path}'"
+		if [[ "$Path" -ef "$BasePath" ]]; then
+			local Left="${StartPath#${Path}}"
+			DBGN 3 "  => YES! '${Path}' matches the base path, plus '${Left#/}'"
+			echo "$Left"
+			return 0
+		fi
+		Path="$(dirname "$Path")"
+	done
+	DBGN 3 "  => NO!"
+	return 1
+} # isInPath()
+
+
 ################################################################################
 
 # default parameters
@@ -72,6 +117,8 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 		case "$Param" in
 			( '--help' | '-h' | '-?' ) DoHelp=1  ;;
 			( '--version' | '-V' ) DoVersion=1  ;;
+			( '--debug='* ) DEBUG="${Param#--*=}" ;;
+			( '--debug' | '-d' ) DEBUG=1 ;;
 			
 			( '--tosrc' | '-s' ) Dest="MRB_SOURCE" ;;
 			( '--tobuild' | '-b' ) Dest="MRB_BUILDDIR" ;;
@@ -118,11 +165,7 @@ if [[ -z "$Src" ]]; then
 		Dir="${!TestVar}"
 		[[ -n "$Dir" ]] || continue
 		
-		[[ "${CWD#$Dir}" == "$CWD" ]] && continue
-		
-		SubDir="${CWD#${Dir}}"
-		# is it a coincidence? ('build.x86_64' matches 'build'...)
-		[[ -n "$SubDir" ]] && [[ "${SubDir:0:1}" != '/' ]] && continue
+		SubDir="$(isInPath "$CWD" "$Dir")" || continue
 		
 		Src="$TestVar"
 		break
