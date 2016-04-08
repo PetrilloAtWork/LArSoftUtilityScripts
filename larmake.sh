@@ -24,12 +24,12 @@ function isDebugging() {
 } # isDebugging()
 
 function DBGN() {
-	locali -i Level="$1"
+	local -i Level="$1"
 	isDebugging "$Level" || return
 	shift
 	STDERR "DBG[${Level}] $*"
 } # DBGN()
-function DBG() { DBG 1 "$@" ; }
+function DBG() { DBGN 1 "$@" ; }
 
 
 function isDirUnder() {
@@ -39,12 +39,15 @@ function isDirUnder() {
 	local ParentDir="$2"
 	[[ -z "$ParentDir" ]] && return 1
 	
-	local FullDir="$(greadlink -f "$Dir")"
-	[[ -z "$FullDir" ]] && return 1
+	DBGN 2 "Is '${Dir}' under '${ParentDir}'?"
+	local FullDir="$Dir"
+	[[ "${FullDir:0:1}" != '/' ]] && FullDir="${CWD}${Dir:+/${Dir}}"
 	while [[ ! "$FullDir" -ef "$ParentDir" ]]; do
 		[[ "$FullDir" == '/' ]] && return 1
 		FullDir="$(dirname "$FullDir")"
+		DBGN 3 "  - now check: '${FullDir}'"
 	done
+	DBGN 2 "  => YES!"
 	return 0
 } # isDirUnder()
 
@@ -95,6 +98,7 @@ fi
 
 [[ -d "$BuildDir" ]] || FATAL 3 "Can't find the build directory (thought it was: '${BuildDir}')"
 
+DBG "Detected build directory: '${BuildDir}'"
 declare -a Command
 if isMakeDirectory "$BuildDir" ; then
 	Command=( 'make' )
