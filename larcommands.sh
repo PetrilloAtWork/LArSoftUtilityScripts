@@ -20,11 +20,15 @@
 #   colouring the repository name by default
 # 20151023 (petrillo@fnal.gov) [v2.2]
 #   long help messages are paged via $PAGER
+# 20160315 (petrillo@fnal.gov) [v2.3]
+#   added option to override source directory
+# 20160329 (petrillo@fnal.gov)
+#   bug fixed: replacement of commands with multiple tags
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
 BASESCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-BASESCRIPTVERSION="2.1"
+BASESCRIPTVERSION="2.3"
 
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
@@ -120,6 +124,8 @@ function help_baseoptions() {
 	    skips the repositories whose name matches the specified REGEX
 	
 	Other options:
+	--source=SOURCEDIR [from MRB_SOURCES; now: '${mrb_SOURCES}']
+	    use SOURCEDIR as base source directory
 	--compact[=MODE]
 	    do not write the git command; out the output of the command according to
 	    MODE:
@@ -492,6 +498,37 @@ function MatchTag() {
 } # MatchTag()
 
 
+function DetectSourceDir() {
+	local SourceDir="$1"
+	while true ; do
+		# if we have a suggestion, we indiscriminately follow it
+		[[ -n "$SourceDir" ]] && break
+		
+		# if the detected base directory has a 'srcs' directory, that's it
+		local BaseDir="$BASEDIR"
+		
+		SourceDir="${BaseDir}/srcs"
+		[[ -d "$SourceDir" ]] && break
+	
+		# go through all base directory path to see if there is a 'srcs'
+		# subdirectory in any of the parent directories	
+		BaseDir="$(pwd)"
+		while [[ ! -d "${BaseDir}/srcs" ]] && [[ "$BaseDir" != '/' ]]; do
+			BaseDir="$(dirname "$BaseDir")"
+		done
+		SourceDir="${BaseDir}/srcs"
+		[[ -d "$SourceDir" ]] && break
+		
+		# Bah. Stick to the current directory.
+		SourceDir='.'
+		break
+	done
+	echo "$SourceDir"
+	[[ -d "$SourceDir" ]]
+	return
+} # DetectSourceDir()
+
+
 function ReplaceTag() {
 	#
 	# Expands a single tag.
@@ -532,7 +569,9 @@ function ExpandTag() {
 	LASTFATAL "No tag supports '${BeginTag}${Tag}${EndTag}'."
 	
 	local -a ExpandedTag
+	DBGN 5 "    ReplaceTag '${Tag}' '${TagKey}'"
 	eval "ExpandedTag=( $( ReplaceTag "$Tag" "$TagKey" ) )"
+	DBGN 6 "    => ${ExpandedTag[@]}"
 	
 	ExpandArguments "${ExpandedTag[@]}"
 	
@@ -559,14 +598,24 @@ function ExpandArgument() {
 		local Tag="${BASH_REMATCH[2]}" # that's the stuff matched in parentheses
 		local PostTag="${BASH_REMATCH[3]}"
 		
+		DBGN 6 "    (identified '${PreTag}' <${BeginTag}${Tag}${EndTag}> '${PostTag}'"
+		
 		local -a ExpandedTags
 		eval "ExpandedTags=( $(ExpandTag "$Tag") )"
+		
+		# recursive expansion of part of the argument after the tag we deal with
+		local -a ExpandedPreTags
+		eval "ExpandedPreTags=( $(ExpandArgument "$PreTag") )"
 		
 		local -a DressedTags
 		local ExpandedTag
 		for ExpandedTag in "${ExpandedTags[@]}" ; do
-			DressedTags=( "${DressedTags[@]}" "${PreTag}${ExpandedTag}${PostTag}" )
+			local ExpandedPreTag
+			for ExpandedPreTag in "${ExpandedPreTags[@]}" ; do
+				DressedTags=( "${DressedTags[@]}" "${ExpandedPreTag}${ExpandedTag}${PostTag}" )
+			done
 		done
+		
 		ReturnNamedArray DressedTags
 	else
 		# argument is just a literal; just return it
@@ -919,6 +968,9 @@ function StandardOptionParser() {
 		( '--autodetect-command' )
 			AutodetectCommand=1
 			;;
+		( '--source='* )
+			SourceDir="${Param#--*=}"
+			;;
 		( '--ifcurrentbranch='* )
 			OnlyIfCurrentBranches=( "${OnlyIfCurrentBranches[@]}" "${Param#--*=}" )
 			;;
@@ -1091,18 +1143,7 @@ fi
 ################################################################################
 ### get to the right directory
 ### 
-if [[ ! -d "${BASEDIR}/srcs" ]]; then
-	BASEDIR="$(pwd)"
-	while [[ ! -d "${BASEDIR}/srcs" ]] && [[ "$BASEDIR" != '/' ]]; do
-		BASEDIR="$(dirname "$BASEDIR")"
-	done
-fi
-
-if [[ ! -d "${BASEDIR}/srcs" ]]; then
-	: ${SRCDIR:="."}
-else
-	: ${SRCDIR:="${BASEDIR}/srcs"}
-fi
+SRCDIR="$(DetectSourceDir "$SourceDir")"
 DBGN 2 "Source directory: '${SRCDIR}'"
 
 ################################################################################

@@ -18,6 +18,20 @@ function FATAL() {
 	exit $Code
 } # FATAL()
 
+function isDebugging() {
+	local Level="${1:-1}"
+	[[ -n "$DEBUG" ]] && [[ "$DEBUG" -ge "$Level" ]]
+} # isDebugging()
+
+function DBGN() {
+	local -i Level="$1"
+	isDebugging "$Level" || return
+	shift
+	STDERR "DBG[${Level}] $*"
+} # DBGN()
+function DBG() { DBGN 1 "$@" ; }
+
+
 function isDirUnder() {
 	# Usage:  isDirUnder Dir ParentDir
 	# returns success if Dir is a subdirectory of ParentDir
@@ -25,12 +39,15 @@ function isDirUnder() {
 	local ParentDir="$2"
 	[[ -z "$ParentDir" ]] && return 1
 	
-	local FullDir="$(greadlink -f "$Dir")"
-	[[ -z "$FullDir" ]] && return 1
+	DBGN 2 "Is '${Dir}' under '${ParentDir}'?"
+	local FullDir="$Dir"
+	[[ "${FullDir:0:1}" != '/' ]] && FullDir="${CWD}${Dir:+/${Dir}}"
 	while [[ ! "$FullDir" -ef "$ParentDir" ]]; do
 		[[ "$FullDir" == '/' ]] && return 1
 		FullDir="$(dirname "$FullDir")"
+		DBGN 3 "  - now check: '${FullDir}'"
 	done
+	DBGN 2 "  => YES!"
 	return 0
 } # isDirUnder()
 
@@ -71,14 +88,17 @@ function isBuildArea() {
 
 BuildDir="$CWD"
 if ! isBuildArea "$BuildDir" ; then
+	DBGN 2 "Current directory is not a building area."
 	if isSourceArea "$BuildDir" ; then
-		BuildDir="$($SwitchScript)"
+		DBGN 2 "Current directory is ai source area: switching."
+		BuildDir="$($SwitchScript ${DEBUG:+--debug="$DEBUG"})"
 		[[ $? == 0 ]] || BuildDir="$CWD"
 	fi
 fi
 
 [[ -d "$BuildDir" ]] || FATAL 3 "Can't find the build directory (thought it was: '${BuildDir}')"
 
+DBG "Detected build directory: '${BuildDir}'"
 declare -a Command
 if isMakeDirectory "$BuildDir" ; then
 	Command=( 'make' )
