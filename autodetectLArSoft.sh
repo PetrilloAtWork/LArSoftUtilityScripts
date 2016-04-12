@@ -214,6 +214,7 @@ function FindLocalProductsDir() {
 		local LocalProductsDir
 		
 		while read LocalProductsDir ; do
+			[[ -d "$LocalProductsDir" ]] || continue
 			DBGN 2 "  testing directory '${LocalProductsDir}'"
 			local SetupFile="${LocalProductsDir}/setup"
 			[[ -r "$SetupFile" ]] || continue
@@ -231,8 +232,9 @@ function FindLocalProductsDir() {
 			DBGN 2 "Local product directory is valid: '${LocalProductsDir}'"
 			echo "$LocalProductsDir"
 			return 0
-		done < <( find . -maxdepth 1 -xtype d -name "$Pattern" 2> /dev/null )
+		done < <( find . -maxdepth 1 -name "$Pattern" 2> /dev/null )
 	done
+	DBGN 2 "No valid local product directory found under '${BaseDir}'"
 	return 1
 } # FindLocalProductsDir()
 
