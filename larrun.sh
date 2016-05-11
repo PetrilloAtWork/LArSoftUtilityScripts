@@ -54,12 +54,14 @@
 #     print art-specific environment values
 # 1.22 (petrillo@fnal.gov)
 #     renamed 'lbnecode' optional package name into 'dunetpc'
+# 1.23 (petrillo@fnal.gov)
+#     added support for Ignominious profiler (igprof)
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.22"
+SCRIPTVERSION="1.23"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -531,8 +533,9 @@ function SetupProfiler() {
 		( 'igprof' )
 			PrependExecutable="igprof"
 			
+			: ${ProfilerTool:='performance'}
 			case $(LowerCase ProfilerTool) in
-				( 'performance' | 'memory' | '' )
+				( 'performance' | 'memory' )
 					ToolOption="-${ProfilerTool:0:1}p"
 					
 					# these are the files which will be created...
@@ -540,7 +543,7 @@ function SetupProfiler() {
 					
 					PrependExecutableParameters=( "${ProfilerToolParams[@]}"
 						"$ToolOption"
-						"-z" "--output ${MachineOutputFile}" # profiling output file
+						"-z" "--output" "$MachineOutputFile" # profiling output file
 						"--debug" # a bit more output
 						)
 					;;
