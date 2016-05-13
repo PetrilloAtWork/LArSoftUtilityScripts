@@ -82,6 +82,11 @@ function isBuildArea() {
 	[[ -n "$MRB_BUILDDIR" ]] && isDirUnder "$Dir" "$MRB_BUILDDIR"
 } # isBuildArea()
 
+function isWorkingArea() {
+	local Dir="$1"
+	[[ -n "$MRB_TOP" ]] && isDirUnder "$Dir" "$MRB_TOP"
+} # isWorkingArea()
+
 
 ###############################################################################
 
@@ -90,7 +95,11 @@ BuildDir="$CWD"
 if ! isBuildArea "$BuildDir" ; then
 	DBGN 2 "Current directory is not a building area."
 	if isSourceArea "$BuildDir" ; then
-		DBGN 2 "Current directory is ai source area: switching."
+		DBGN 2 "Current directory is in source area: switching."
+		BuildDir="$($SwitchScript ${DEBUG:+--debug="$DEBUG"})"
+		[[ $? == 0 ]] || BuildDir="$CWD"
+	elif isWorkingArea "$BuildDir" ; then
+		DBGN 2 "Current directory is in a working area."
 		BuildDir="$($SwitchScript ${DEBUG:+--debug="$DEBUG"})"
 		[[ $? == 0 ]] || BuildDir="$CWD"
 	fi
