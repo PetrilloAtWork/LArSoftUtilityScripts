@@ -58,12 +58,14 @@
 #     added support for Ignominious profiler (igprof)
 # 1.24 (petrillo@fnal.gov)
 #     added support for post-processing scripts (user has to start them though)
+# 1.25 (petrillo@fnal.gov)
+#     added options to valgrind memcheck command
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.24"
+SCRIPTVERSION="1.25"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -625,7 +627,8 @@ function SetupProfiler() {
 						"--tool=${ToolOption}"
 						"--xml=yes" "--xml-file=${MachineOutputFile}" # generate XML output and write it file
 						"--log-file=${LogOutputFile}" # send the plain text output to a second file
-						'--child-silent-after-fork=yes' # do not trace child (fork()'ed) processes
+						'--child-silent-after-fork=yes' # do not trace child (fork()ed) processes
+						'--track-origins=yes'
 						'-q' # reduce the plain text output
 						'--leak-check=full'
 						)
