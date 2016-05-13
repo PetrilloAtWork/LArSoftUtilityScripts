@@ -15,8 +15,8 @@ VERSION="1.1"
 : ${BASEDIR:="."}
 
 declare -a StandardQualifiers
-StandardQualifiers=(       'debug:e7'  'e7:prof'   )
-StandardQualifierAliases=( 'debugging' 'profiling' )
+StandardQualifiers=(       'debug:e9'  'e9:prof'   )
+StandardQualifierAliases=( 'debug' 'prof' )
 
 function help() {
 	cat <<-EOH
