@@ -54,12 +54,16 @@
 #     print art-specific environment values
 # 1.22 (petrillo@fnal.gov)
 #     renamed 'lbnecode' optional package name into 'dunetpc'
+# 1.23 (petrillo@fnal.gov)
+#     added support for Ignominious profiler (igprof)
+# 1.24 (petrillo@fnal.gov)
+#     added support for post-processing scripts (user has to start them though)
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.22"
+SCRIPTVERSION="1.24"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -85,6 +89,8 @@ DATETAG="$(date '+%Y%m%d')"
 # rate of detailed snapshots
 # (e.g. 10: 1 detailed every 10 snapshots; 1: every snapshot is detailed)
 : ${MASSIF_DETAILEDFREQ:="1"}
+
+declare -i NPostProcessWriters=0
 
 #
 # Standard packages which will be always looked for when printing the environment
@@ -437,6 +443,133 @@ function PathListVar() {
 } # PathListVar()
 
 
+function AddPostProcessWriter() {
+	local -i NWriter="$((NPostProcessWriters++))"
+	local WriterName="PostProcessWriter${NWriter}"
+	DBGN 2 "Adding post-process script part #${NWriter}: $@"
+	eval "${WriterName}=( "$@" )"
+} # AddPostProcessWriter()
+
+function WritePostProcessScript() {
+	local ScriptPath="$1"
+	local ScriptName="$(basename "$ScriptPath")"
+	local ScriptDir="$(dirname "$ScriptPath")"
+	[[ "$ScriptDir" == '.' ]] && ScriptDir="$(pwd)"
+	
+	DBGN 1 "Post process script: ${NPostProcessWriters} parts"
+	[[ $NPostProcessWriters -gt 0 ]] || return 1
+	
+	local -i NWriter
+	cat <<-EOH > "$ScriptPath"
+	#!/usr/bin/env bash
+	#
+	# Post-processing script '${ScriptName}'
+	#
+	# Run this script manually after successful completion of the job.
+	#
+	
+	cd "\$(dirname "\$0")"
+	
+	EOH
+	for (( NWriter = 0 ; NWriter < $NPostProcessWriters ; ++NWriter )); do
+		local WriterName="PostProcessWriter${NWriter}"
+		DBGN 2 "  writing part #${NWriter}: $(eval "echo \${${WriterName}[@]}")"
+		{
+			cat <<-EOM >> "$ScriptPath"
+			###
+			### part $((NWriter+1))
+			###
+			
+			EOM
+			eval "\${${WriterName}[@]}"
+		} >> "$ScriptPath"
+		LASTFATAL "Error writing post-processing script #${NWriter} with command: $(eval "echo \${${WriterName}[@]}")"
+	done
+	
+	cat <<-EOT >> "$ScriptPath"
+	
+	###
+	### clean up
+	###
+	[[ "\$(basename "\$0")" == '${ScriptName}' ]] && rm '${ScriptName}'
+	EOT
+	chmod a+x "$ScriptPath"
+	DBG "Post-process script '${ScriptPath}' written."
+	return 0
+} # WritePostProcessScript()
+
+
+function IgProfReport() {
+	local Mode="$1"
+	shift
+	local DataFile="$1"
+	local ReportFile="$2"
+	DBGN 2 "IgProfReport in ${Mode} mode"
+	case "$Mode" in
+		( 'performance' )
+			cat <<-EOS
+			#
+			# Ignominious profiler report: CPU usage
+			#
+			echo 'Producing CPU time report...'
+			igprof-analyse -d -v -g "$DataFile" >& "$ReportFile"
+			EOS
+			;;
+		( 'memory' )
+			cat <<-EOS
+			#
+			# Ignominious profiler report: memory usage
+			#
+			# TODO there is a more useful report than MEM_TOTAL...
+			echo 'Producing memory usage report...'
+			igprof-analyse -d -h -v -g -r MEM_TOTAL "$DataFile" > "$ReportFile"
+			EOS
+			;;
+		( * )
+			DBGN 2 "No post-processing for mode '${Mode}'"
+			;;
+	esac
+} # IgProfReport
+
+
+function CompressFile_gzip() {
+	local File="$1"
+	echo "gzipi -v '${File}'"
+}
+
+function CompressFile_bzip2() {
+	local File="$1"
+	echo "bzip2 -v '${File}'"
+}
+
+
+function CompressFiles() {
+	local -a Files=( "$@" )
+
+	local File
+	for File in "${Files[@]}" ; do
+		local Format
+		local Source="$File"
+		case "$File" in
+			( *.gz )
+				Source="${File%.gz}"
+				Format='gzip'
+				;;
+			( *.bz2 )
+				Source="${File%.bz2}"
+				Format='bzip2'
+				;;
+			( * )
+				Format=''
+				;;
+		esac
+		[[ -n "$Format" ]] || continue
+		
+		"CompressFile_${Format}" "$Source"
+	done
+} # CompressFiles()
+
+
 function SetupProfiler() {
 	local Profiler="$1"
 	
@@ -514,6 +647,7 @@ function SetupProfiler() {
 						)
 					isFlagSet DoStackProfiling && PrependExecutableParameters=( "${PrependExecutableParameters[@]}" '--stacks=yes' )
 					isFlagSet DoMMapProfiling && PrependExecutableParameters=( "${PrependExecutableParameters[@]}" '--pages-as-heap=yes' )
+					AddPostProcessWriter CompressFiles "${OutputFile}.bz2"
 					;;
 				( 'dhat' )
 					ToolOption="exp-dhat"
@@ -531,18 +665,21 @@ function SetupProfiler() {
 		( 'igprof' )
 			PrependExecutable="igprof"
 			
+			: ${ProfilerTool:='performance'}
 			case $(LowerCase ProfilerTool) in
-				( 'performance' | 'memory' | '' )
+				( 'performance' | 'memory' )
 					ToolOption="-${ProfilerTool:0:1}p"
 					
 					# these are the files which will be created...
 					MachineOutputFile="${JobName}-${ProfilerTool}.gz"
+					ReportFile="${JobName}-${ProfilerTool}-report.txt"
 					
 					PrependExecutableParameters=( "${ProfilerToolParams[@]}"
 						"$ToolOption"
-						"-z" "--output ${MachineOutputFile}" # profiling output file
+						"-z" "--output" "$MachineOutputFile" # profiling output file
 						"--debug" # a bit more output
 						)
+					AddPostProcessWriter 'IgProfReport' "$ProfilerTool" "$MachineOutputFile" "$ReportFile"
 					;;
 				( * ) FATAL 1 "Unsupported profiling tool for ${Profiler}: '${ProfilerTool}'" ;;
 			esac
@@ -1401,6 +1538,12 @@ done
 SetupProfiler "$Profiler"
 LASTFATAL "Error setting up the profiling tool '${Profiler}'. Quitting."
 
+#
+# write the post-process script (if any)
+#
+PostProcessScriptPath="${WorkDir:+${WorkDir}/}${JobName}-postprocess.sh"
+WritePostProcessScript "$(basename "$PostProcessScriptPath")" || PostProcessScriptPath=''
+
 
 #
 # execute the command
@@ -1542,5 +1685,10 @@ cat <<EOM
 To see the output:
 cd ${WorkDir}
 EOM
+if [[ -x "$PostProcessScriptPath" ]]; then
+	cat <<-EOM
+	Complete processing with: '${PostProcessScriptPath}'
+	EOM
+fi
 
 exit 0
