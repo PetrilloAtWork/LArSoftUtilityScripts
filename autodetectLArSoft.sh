@@ -433,6 +433,11 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 						let ScoreTry+=1
 						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
 						continue 2
+					( 'LARIAT' )
+						ExperimentTry='LArIAT'
+						let ScoreTry+=1
+						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
+						continue 2
 						;;
 					( 'UBOONE' | 'MICROBOONE' )
 						ExperimentTry='MicroBooNE'

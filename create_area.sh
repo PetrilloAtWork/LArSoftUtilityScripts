@@ -5,7 +5,7 @@
 #
 
 declare local_create_area_DefaultVersion="${LARCORE_VERSION:-"develop"}"
-declare local_create_area_DefaultQual="${MRB_QUAL:-"e7:debug"}"
+declare local_create_area_DefaultQual="${MRB_QUAL:-"e9:debug"}"
 
 function IsInList() {
 	# IsInList Key ListItem [...]
@@ -115,6 +115,10 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
 						local_create_area_experiment='DUNE'
 						break 2
 						;;
+					( 'LARIAT' )
+						local_create_area_experiment='LArIAT'
+						break 2
+						;;
 					( 'LAR1ND' | 'SBND' )
 						local_create_area_experiment='SBND'
 						break 2
@@ -134,6 +138,8 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
 				local_create_area_experiment="DUNE"
 			elif [[ -d '/sbnd' ]] ||  [[ -d '/lar1nd' ]]; then
 				local_create_area_experiment="SBND"
+			elif [[ -d '/lariat' ]]; then
+				local_create_area_experiment="LArIAT"
 			elif [[ -d "/uboone" ]]; then
 				local_create_area_experiment="MicroBooNE"
 			fi
@@ -144,6 +150,9 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
 		;;
 	( 'lar1nd' | 'sbnd' )
 		local_create_area_experiment="SBND"
+		;;
+	( 'lariat' )
+		local_create_area_experiment="LArIAT"
 		;;
 	( 'uboone' | 'microboone' )
 		local_create_area_experiment="MicroBooNE"
