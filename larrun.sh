@@ -60,12 +60,14 @@
 #     added support for post-processing scripts (user has to start them though)
 # 1.25 (petrillo@fnal.gov)
 #     added options to valgrind memcheck command
+# 1.26 (petrillo@fnal.gov)
+#     added `ups active` output to the log
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.25"
+SCRIPTVERSION="1.26"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -1612,6 +1614,10 @@ fi
 cat <<EOM >> "$AbsoluteLogPath"
 ================================================================================
 $(PrintPackageVersions)
+================================================================================
+UPS active packages:
+--------------------------------------------------------------------------------
+$(ups active)
 ================================================================================
 EOM
 
