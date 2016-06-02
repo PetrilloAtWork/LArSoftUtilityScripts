@@ -141,6 +141,16 @@ function DoPlainSetup() {
 						echo "    base setup script '${setup_base_script}' not available -- using local setup."
 						setup_base_script=":golocal:"
 					fi
+				;;
+				( 'LArIAT' )
+					echo " * ${setup_experiment} specific setup"
+					setup_base_script="${HOME}/LArSoft/software/setup_lariat.sh"
+					if [[ -r "$setup_base_script" ]]; then
+						source "$setup_base_script" || let ++nErrors
+					else
+						echo "    base setup script '${setup_base_script}' not available -- using local setup."
+						setup_base_script=":golocal:"
+					fi
 					;;
 				( * )
 					# this is experiment-agnostic setup:

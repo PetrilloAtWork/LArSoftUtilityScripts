@@ -161,7 +161,7 @@ function create_runarea() {
 	fi
 	
 	mkdir -p "logs" "job" "input"
-	[[ -d "$MRB_TOP" ]] && cd "$MRB_TOP"
+	[[ -d "$runarea" ]] && cd "$runarea"
 } # create_runarea()
 
 function create_runarea_wrapper() {
