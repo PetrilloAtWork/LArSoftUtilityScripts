@@ -6,11 +6,13 @@
 # Usage: see FindInPath.py --help
 # 
 # Changes:
-# 20150105, petrillo@fnal.gov (version 1.0)
+# 20150105 (petrillo@fnal.gov) [v1.0]
 #   first version (from a bash version)
+# 20160602 (petrillo@fnal.gov) [v1.1]
+#   add a --full option and make partial match the default
 #
 
-__version__ = "1.0"
+__version__ = "1.1"
 __doc__ = """
 Looks for files in the search directories specified in the given variables.
 """
@@ -73,6 +75,12 @@ def FindInDir(SearchDir, Patterns, options):
 	return FileRecords
 # FindInDir()
 
+def WrapString(s, left, right):
+	if left and not s.startswith(left): s = left + s
+	if right and not s.endswith(right): s += right
+	return s
+# WrapString()
+
 
 def Find(SearchDirs, options):
 	"""Finds the patterns specified in options
@@ -81,11 +89,14 @@ def Find(SearchDirs, options):
 	# prepare the patterns
 	RegexPatterns = []
 	for pattern in options.RegexFilters:
+		if options.FullMatch: pattern = WrapString(pattern, '^', '$')
 		logging.debug("Adding regex pattern: '%s'", pattern)
 		RegexPatterns.append(re.compile(pattern))
 	# for regex patterns
 	
 	for simple_pattern in options.SimpleFilters:
+		if not options.FullMatch:
+			simple_pattern = WrapString(simple_pattern, '*', '*')
 		pattern = fnmatch.translate(simple_pattern)
 		logging.debug("Adding simple pattern: '%s' (regex: '%s')", 
 		  simple_pattern, pattern)
@@ -143,6 +154,10 @@ if __name__ == "__main__":
 	  action="append",
 	  help="prints only files whose name matches the specified regular expression"
 	    " (as in python's re module)"
+	  )
+	PatternOptions.add_argument('--full', '-f', dest="FullMatch",
+	  action="store_true",
+	  help="the pattern must match the entire file name"
 	  )
 	
 	InputOptions = Parser.add_argument_group('Input options')

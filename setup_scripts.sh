@@ -36,8 +36,8 @@ fi
 ###############################################################################
 ### FindFCL
 ###
-if [[ -x "${LARSCRIPTDIR}/FindInPath.sh" ]]; then
-	alias FindFCL="${LARSCRIPTDIR}/FindInPath.sh --fcl"
+if [[ -x "${LARSCRIPTDIR}/FindInPath.py" ]]; then
+	alias FindFCL="${LARSCRIPTDIR}/FindInPath.py --fcl"
 fi
 
 ###############################################################################
