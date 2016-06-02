@@ -154,6 +154,9 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
 	( 'lariat' )
 		local_create_area_experiment="LArIAT"
 		;;
+	( 'argoneut' )
+		local_create_area_experiment="ArgoNeuT"
+		;;
 	( 'uboone' | 'microboone' )
 		local_create_area_experiment="MicroBooNE"
 		;;
