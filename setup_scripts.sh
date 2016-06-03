@@ -27,10 +27,13 @@ if ! type -t greadlink > /dev/null ; then
 fi
 
 ###############################################################################
-### larswitch
+### larswitch, lartestswitch
 ###
 if [[ -x "${LARSCRIPTDIR}/larswitch.sh" ]]; then
 	function larswitch() { cd "$("${LARSCRIPTDIR}/larswitch.sh" "$@")" ; }
+fi
+if [[ -x "${LARSCRIPTDIR}/lartestswitch.sh" ]]; then
+	function lartestswitch() { cd "$("${LARSCRIPTDIR}/lartestswitch.sh" "$@")" ; }
 fi
 
 ###############################################################################
