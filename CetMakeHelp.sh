@@ -5,7 +5,7 @@
 
 SCRIPTNAME="$(basename "$0")"
 SCRIPTDIR="$(dirname "$0")"
-SCRIPTVERSION="1.0"
+SCRIPTVERSION="1.1"
 
 [[ "${#DEFAULTPACKAGES[@]}" == 0 ]] && DEFAULTPACKAGES=( 'cetbuildtools' 'art' )
 
@@ -52,6 +52,8 @@ function help() {
 	Options:
 	--listonly , -L
 	    do not show the files, only print their path
+	--listall
+	    print all the possible choices of macro files
 	--package=PACKAGE [${DEFAULTPACKAGES[@]}]
 	    add one UPS package at the list of package to be used
 	--pager=PAGER [${PAGER}]
@@ -107,7 +109,7 @@ function FindModuleDir() {
 
 declare -a Packages
 declare -i DoHelp=0 DoVersion=0
-declare -i ListOnly=0
+declare -i ListOnly=0 ListAll=0
 declare -i NoMoreOptions=0
 declare -a Patterns
 for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
@@ -119,6 +121,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--debug' )              DEBUG=1 ;;
 			( '--debug='* )            DEBUG="${Param#--*=}" ;;
 			( '--listonly' | '-L' )    ListOnly=1 ;;
+			( '--listall' )            ListAll=1 ;;
 			( '--version' | '-V' )     DoVersion=1 ;;
 			( '--help' | '-h' | '-?' ) DoHelp=1 ;;
 			( '-' | '--' ) NoMoreOptions=1 ;;
@@ -141,6 +144,7 @@ fi
 
 [[ "${#Packages[@]}" == 0 ]] && Packages=( "${DEFAULTPACKAGES[@]}" )
 
+[[ ${#Patterns[@]} == 0 ]] && ListAll=1
 
 # set up check
 declare -a AvailablePackages
@@ -162,6 +166,15 @@ for PackageName in "${Packages[@]}" ; do
 		DBG "Failed to find module dir (got: '${PackageModuleDir}')"
 		ERROR "Could not find module directory of '${PackageName}' under '${PackageDir}'"
 		let ++nErrors
+		continue
+	fi
+	
+	if isFlagSet ListAll ; then
+		echo -n "All choices for '${PackageName}':"
+		for CMakeFile in "$PackageModuleDir"/*.cmake ; do
+			echo -n " $(basename "${CMakeFile%.cmake}")"
+		done
+		echo
 		continue
 	fi
 	
@@ -187,6 +200,8 @@ for PackageName in "${Packages[@]}" ; do
 	
 done # for UPS products
 [[ "${AvailablePackages[@]}" == 0 ]] && FATAL 1 "No relevant package set up!"
+
+isFlagSet ListAll && exit
 
 # print all the sources we could find
 if [[ "${#ModulesFound[@]}" == 0 ]]; then
