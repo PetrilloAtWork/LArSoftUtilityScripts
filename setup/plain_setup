@@ -295,8 +295,11 @@ function DoPlainSetup() {
 				( 'LBNE' | 'DUNE' )
 					codenames=( "${codenames[@]}" )
 					;;
+				( 'SBND' )
+					codenames=( "${codenames[@]}" )
+					;;
 				( 'AllExperiments' )
-					codenames=( "${codenames[@]}" 'dunetpc' 'uboonecode' )
+					codenames=( "${codenames[@]}" 'dunetpc' 'uboonecode' 'sbndcode' 'lariatsoft' 'argoneutcode' )
 					;;
 				( * )
 					codenames=( "${codenames[@]}" )
