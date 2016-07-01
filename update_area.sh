@@ -8,6 +8,8 @@
 #     original version
 # 20150415 (petrillo@fnal.gov) [v1.1]
 #     added the "--fake" option
+# 20160701 (petrillo@fnal.gov) [v1.2]
+#     unsetting the old MRB_INSTALL path from PRODUCTS
 # 
 
 
@@ -404,7 +406,11 @@ declare LocalProductsDirName="localProducts_${MRB_PROJECT}_${Version}_${Qualifie
 declare LocalProductsPath="${MRB_TOP}/${LocalProductsDirName}"
 
 if [[ -n "$local_updatearea_SourceMe" ]]; then
-	echo "source '${LocalProductsPath}/setup'" > "$local_updatearea_SourceMe"
+	cat <<-EOS > "$local_updatearea_SourceMe"
+	source '${LocalProductsPath}/setup'
+	[[ $? != 0 ]] && return $?
+	export PRODUCTS="\$(sed -E -e "s@(:|^)${MRB_INSTALL}(:|$)@@g" <<< "${PRODUCTS}")"
+	EOS
 fi
 
 if [[ -d "$LocalProductsPath" ]] && isFlagSet FORCE ; then
