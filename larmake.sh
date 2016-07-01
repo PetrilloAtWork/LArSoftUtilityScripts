@@ -96,11 +96,11 @@ if ! isBuildArea "$BuildDir" ; then
 	DBGN 2 "Current directory is not a building area."
 	if isSourceArea "$BuildDir" ; then
 		DBGN 2 "Current directory is in source area: switching."
-		BuildDir="$($SwitchScript ${DEBUG:+--debug="$DEBUG"})"
+		BuildDir="$($SwitchScript --tobuild ${DEBUG:+--debug="$DEBUG"})"
 		[[ $? == 0 ]] || BuildDir="$CWD"
 	elif isWorkingArea "$BuildDir" ; then
 		DBGN 2 "Current directory is in a working area."
-		BuildDir="$($SwitchScript ${DEBUG:+--debug="$DEBUG"})"
+		BuildDir="$($SwitchScript --tobuild ${DEBUG:+--debug="$DEBUG"})"
 		[[ $? == 0 ]] || BuildDir="$CWD"
 	fi
 fi
