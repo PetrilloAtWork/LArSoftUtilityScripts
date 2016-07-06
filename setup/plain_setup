@@ -134,7 +134,7 @@ function DoPlainSetup() {
 					;;
 				( 'SBND' )
 					echo " * SBND specific setup"
-					setup_base_script="/grid/fermiapp/products/lar1nd/setup_lar1nd.sh"
+					setup_base_script="/grid/fermiapp/products/sbnd/setup_sbnd.sh"
 					if [[ -r "$setup_base_script" ]]; then
 						source "$setup_base_script" || let ++nErrors
 					else
