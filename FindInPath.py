@@ -10,9 +10,11 @@
 #   first version (from a bash version)
 # 20160602 (petrillo@fnal.gov) [v1.1]
 #   add a --full option and make partial match the default
+# 20160718 (petrillo2fnal.gov) [v1.2]
+#   bug fix: default output should print directory, not full path
 #
 
-__version__ = "1.1"
+__version__ = "1.2"
 __doc__ = """
 Looks for files in the search directories specified in the given variables.
 """
@@ -135,7 +137,7 @@ if __name__ == "__main__":
 	Parser = argparse.ArgumentParser(description=__doc__)
 	
 	Parser.set_defaults(
-	  OutputFormat = "%(FileName)s (in %(Path)s)",
+	  OutputFormat = "%(FileName)s (in %(Dir)s)",
 	  SimpleFilters = [],
 	  RegexFilters = [],
 	  )
