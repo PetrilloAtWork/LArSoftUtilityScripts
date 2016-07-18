@@ -160,6 +160,9 @@ case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
 	( 'uboone' | 'microboone' )
 		local_create_area_experiment="MicroBooNE"
 		;;
+	( 'larsoftobj' )
+		local_create_area_experiment="LArSoftObj"
+		;;
 esac
 
 local_create_area_setup_qual="$(SortUPSqualifiers "${local_create_area_setup_qual//_/:}")"

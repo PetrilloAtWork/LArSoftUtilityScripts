@@ -513,8 +513,6 @@ if [[ -z "$Experiment" ]]; then
 		Experiment="LArIAT"
 	elif [[ -d "/uboone" ]]; then
 		Experiment="MicroBooNE"
-	else
-		Experiment="LArSoft"
 	fi
 	DBGN 1 "Experiment forcibly set to: '${Experiment}'"
 fi
@@ -556,6 +554,10 @@ case "$(LowerCaseVariable Experiment)" in
 	( 'larsoft' )
 		Experiment="LArSoft"
 		LeadingPackage="larsoft"
+		;;
+	( 'larsoftobj' )
+		Experiment="LArSoftObj"
+		LeadingPackage="larsimobj" # FIXME need to be larsoftobj when it will be ready
 		;;
 esac
 
