@@ -87,6 +87,16 @@ function isWorkingArea() {
 	[[ -n "$MRB_TOP" ]] && isDirUnder "$Dir" "$MRB_TOP"
 } # isWorkingArea()
 
+function DetectNCPUs() {
+	if [[ -r '/proc/cpuinfo' ]]; then
+		grep -c 'processor' '/proc/cpuinfo'
+		return 0
+	else
+		sysctl -n hw.ncpu 2> /dev/null
+		return
+	fi
+	return 1
+} # DetectNCPUs()
 
 ###############################################################################
 
@@ -111,6 +121,9 @@ DBG "Detected build directory: '${BuildDir}'"
 declare -a Command
 if isMakeDirectory "$BuildDir" ; then
 	Command=( 'make' )
+	declare -i NCPUs
+	NCPUs=$(DetectNCPUs)
+	[[ $? == 0 ]] && Command=( "${Command[@]}" "-j$((NCPUs + 1))" )
 elif isNinjaDirectory "$BuildDir" ; then
 	Command=( 'ninja' )
 	BuildDir="$MRB_BUILDDIR"
