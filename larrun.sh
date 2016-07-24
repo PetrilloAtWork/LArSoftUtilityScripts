@@ -101,13 +101,14 @@ declare -i NPostProcessWriters=0
 #
 declare -a StandardPackages
 StandardPackages=(
+	larcoreobj lardataobj larsimobj
 	larcore lardata larevt larsim larreco larana
 	lareventdisplay larpandora larsoft
 	larexamples
 )
 declare -a OptionalPackages
 OptionalPackages=(
-	uboonecode dunetpc lar1ndcode t962code argoneutcode lariatcode
+	uboonecode dunetpc sbndcode t962code argoneutcode lariatcode
 )
 
 function help() {
