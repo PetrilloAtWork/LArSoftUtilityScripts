@@ -833,7 +833,7 @@ function isNinjaDirectory() {
   local Dir="$1"
   
   # a ninja directory is under the build area:
-  isBuildArea "$Dir" || return 1
+  isMRBBuildArea "$Dir" || return 1
   
   # the top build directory has a build.ninja file
   [[ -r "${MRB_BUILDDIR}/build.ninja" ]] || return 1
