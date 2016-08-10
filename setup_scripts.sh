@@ -8,6 +8,7 @@ LARSCRIPTDIR="$(dirname "$BASH_SOURCE")"
 echo "Setting up LArSoft scripts in '${LARSCRIPTDIR}'"
 export LARSCRIPTDIR
 
+
 ###############################################################################
 ###
 ###
@@ -127,13 +128,4 @@ function setup_as() {
 	return $nErrors
 } # setup_as()
 
-
-###############################################################################
-### goninja
-###
-function goninja() {
-	pushd "$MRB_BUILDDIR" > /dev/null
-	ninja "$@"
-	popd > /dev/null
-} # goninja()
 
