@@ -3,13 +3,18 @@
 # Prints the previous or next directory in the list of GIT repositories
 # in the MRB working area.
 #
+# Changes:
+# 20160810 (petrillo@fna.gov) [v1.2]
+#   using larsoft_scriptutils.sh
+#
 
-# guard against sourcing
-[[ "$BASH_SOURCE" != "$0" ]] && echo "Don't source this script." >&2 && exit 1
+hasLArSoftScriptUtils >& /dev/null || source "${LARSCRIPTDIR}/larsoft_scriptutils.sh"
+mustNotBeSourced || return 1
+
 
 ################################################################################
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.1"
+SCRIPTVERSION="1.2"
 CWD="$(pwd)"
 
 function help() {
@@ -42,97 +47,12 @@ function help() {
 } # help()
 
 
-function isFlagSet() {
-	local VarName="$1"
-	[[ -n "${!VarName//0}" ]]
-} # isFlagSet()
-
-function isFlagUnset() {
-	local VarName="$1"
-	[[ -z "${!VarName//0}" ]]
-} # isFlagUnset()
-
-function STDERR() { echo "$*" >&2 ; }
-function ERROR() { STDERR "ERROR: $@" ; }
-function FATAL() {
-	local Code="$1"
-	shift
-	STDERR "FATAL ERROR (${Code}): $*"
-	exit $Code
-} # FATAL()
-function LASTFATAL() {
-	local Code="$?"
-	[[ "$Code" != 0 ]] && FATAL "$Code""$@"
-} # LASTFATAL()
-
-function isDebugging() {
-	local -i Level="${1:-1}"
-	[[ -n "$DEBUG" ]] && [[ "$DEBUG" -ge "$Level" ]]
-} # isDebugging()
-function DBGN() {
-	local -i Level="$1"
-	shift
-	isDebugging "$Level" && STDERR "DBG[${Level}]| $*"
-} # DBGN()
-function DBG() { DBGN 1 "$*" ; }
-
+###############################################################################
 
 function StringLength() { echo "${#1}" ; }
 
 
-function isInteger() {
-	local Value="$1"
-	[[ "$Value" =~ ^[+-]*[0-9]+$ ]]
-} # isInteger()
-
-
 ###############################################################################
-
-function hasDir() {
-	local TestDir="$1"
-	local KeyDir="$2"
-	local Dir="${TestDir:+"${TestDir%/}/"}${KeyDir}"
-	DBGN 3 "     (is there a '${Dir}' directory?)"
-	[[ -d "$Dir" ]]
-} # hasDir()
-
-function isUPSpackage() {
-	local TestDir="${1:+"${1%/}/"}"
-	DBGN 2 "   test if '${TestDir}' is a UPS package"
-	ls "${TestDir}/"*.version >& /dev/null
-} # isUPSpackage()
-
-function isCMakeBuildDir() {
-	local TestDir="$1"
-	DBGN 2 "   test if '${TestDir}' is a CMake build directory"
-	hasDir "$TestDir" 'CMakeFiles'
-} # isCMakeBuildDir()
-
-function isGITrepository() {
-	local TestDir="$1"
-	DBGN 2 "   test if '${TestDir}' is a GIT repository"
-	hasDir "$TestDir" '.git'
-} # isGITrepository()
-
-function DetectLocation() {
-	# Prints the MRB location where we are
-	local Cwd="$(greadlink -f "$(pwd)")"
-	
-	local Mode
-	DBG "Trying to find out where '${Cwd}' is"
-	for Mode in 'SOURCE' 'BUILDDIR' 'INSTALL' 'TOP' ; do
-		local MRBVarName="MRB_${Mode}"
-		local MRBPath="$(greadlink -f "${!MRBVarName}")"
-		DBGN 3 "${MRBVarName} => '${MRBPath}' [${Mode}]"
-		if [[ "$Cwd" == "$MRBPath" ]] || [[ "$Cwd" =~ ^${MRBPath}/ ]]; then
-			DBGN 2 "Matched: ${Mode}"
-			echo "$Mode"
-			return 0
-		fi
-	done
-	return 1
-} # DetectLocation()
-
 
 function StepRepository() {
 	# Usage:  StepRepository  BaseDir [Step]
@@ -287,7 +207,7 @@ if isFlagSet DoVersion ; then
 fi
 
 declare Mode
-Mode="$(DetectLocation "$(pwd)")"
+Mode="$(DetectMRBLocation "$(pwd)")"
 LASTFATAL 1 "I can't detect in which area of MRB I am."
 if [[ "$Mode" == 'TOP' ]]; then
 	ERROR "We are in the main MRB working area. Jumping to source area."
@@ -307,7 +227,7 @@ case "$Mode" in
 		TestDirFunc='isCMakeBuildDir'
 		;;
 	( 'INSTALL' )
-		TestDirFunc='isUPSpackage'
+		TestDirFunc='isUPSpackageDir'
 		;;
 	( * )
 		FATAL 1 "Internal error: unsupported mode '${Mode}'"
