@@ -24,6 +24,9 @@
 #   added option to override source directory
 # 20160329 (petrillo@fnal.gov)
 #   bug fixed: replacement of commands with multiple tags
+# 20160811 (petrillo@fnal.gov)
+#   bug fixed: aligned repository name in compact output now takes the overhead
+#     of the string due to highlight (if any)
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
@@ -106,7 +109,8 @@ function help_base() {
 
 function help_baseoptions() {
 	cat <<-EOH
-	These are some of the supported by the base script ${BASESCRIPTNAME} relies on.
+	These are some of the options supported by the base script ${SCRIPTNAME}
+	relies on.
 	For additional options useful to write your own commands,
 	ask for '--help=developtions'.
 	
@@ -130,7 +134,7 @@ function help_baseoptions() {
 	    do not write the git command; out the output of the command according to
 	    MODE:
 	    'prepend' (default): "[%PACKAGENAME%] OUTPUT"
-	    'line' (default): "[%PACKAGENAME%]\nOUTPUT"
+	    'line': "[%PACKAGENAME%]\nOUTPUT"
 	    'append': "OUTPUT [%PACKAGENAME%]"
 	--color[=<false|always|auto>] [always]
 	    uses color to write the repository name, unless the mode is "false";
@@ -714,19 +718,23 @@ function ColorMsg() {
 
 function PrepareHeader() {
 	local Specs="$1"
-	local Content="$(ColorMsg HEADER "$2")"
+	local Content="$2"
+	local HighlightedContent="$(ColorMsg HEADER "$2")"
+  local -i HighlightOverhead=$(( ${#HighlightedContent} - ${#Content} ))
 	
+	local Format
 	case "${Specs:0:1}" in
 		( '-' )
-			printf "%-${Specs:1}s" "$Content"
+			Format="%-$((HighlightOverhead + ${Specs:1}))s"
 			;;
 		( '+' )
-			printf "%${Specs:1}s" "$Content"
+			Format="%$((HighlightOverhead + ${Specs:1}))s"
 			;;
 		( * )
-			echo "$Content"
+			Format="%s\n"
 			;;
 	esac
+	printf "$Format" "$HighlightedContent"
 } # PrepareHeader()
 
 
@@ -982,6 +990,9 @@ function StandardOptionParser() {
 			;;
 		( '--skip='* )
 			SkipRepos=( "${SkipRepos[@]}" "${Param#--*=}" )
+			;;
+		( "--compact" )
+			CompactMode='prepend'
 			;;
 		( "--compact="* )
 			CompactMode="${Param#--compact=}"
