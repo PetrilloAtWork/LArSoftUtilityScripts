@@ -96,6 +96,20 @@ function isFlagUnset() {
 } # isFlagUnset()
 
 
+function anyFlagSet() {
+  #
+  # anyFlagSet  VarName [VarName ...]
+  #
+  # Returns whether at least one of the specified flags VarName is set
+  #
+  local FlagName
+  for FlagName in "$@" ; do
+    isFlagSet "$FlagName" && return 0
+  done
+  return 1
+} # anyFlagSet()
+
+
 
 function StringLength() {
   #
@@ -143,19 +157,69 @@ function isPositiveInteger() {
 } # isPositiveInteger()
 
 
+function Max() {
+  #
+  # Max  Number [Number ...]
+  # 
+  # Prints the largest among the specified integral values.
+  # If a value is not an integer (see isInteger) it is skipped, and the return
+  # value will be 1 (that is, an error).
+  # If no value is specified, the return value is also an error.
+  # If there is no good value, nothing is printed; otherwise, the largest among
+  # the valid numbers is printed.
+  #
+  [[ $# == 0 ]] && return 1
+  local -i errors=0
+  local -i good=0
+  local -i max
+  local -i elem
+  for elem in "$@" ; do
+    isInteger "$elem" || continue
+    if [[ $good == 0 ]]; then
+      max=$elem
+    else
+      [[ $elem -gt $max ]] && max="$elem"
+    fi
+    let ++good
+  done
+  [[ $good -gt 0 ]] && echo "$max"
+  [[ $good == $# ]] # return value: all elements were good integers
+} # Max()
+
+
 
 ################################################################################
 ###  Console output
 ################################################################################
 
 # some ANSI terminal color codes
-export ANSIRESET="\e[0m"
-export ANSIRED="\e[1;31m"
-export ANSIGREEN="\e[0;32m"
-export ANSIYELLOW="\e[1;33m"
-export ANSICYAN="\e[36m"
-export ANSIGRAY="\e[1;30m"
-export ANSIWHITE="\e[1;37m"
+declare -rx \
+  ANSIRESET="\e[0m" \
+  ANSIRED="\e[1;31m" \
+  ANSIGREEN="\e[0;32m" \
+  ANSIYELLOW="\e[1;33m" \
+  ANSICYAN="\e[36m" \
+  ANSIGRAY="\e[1;30m" \
+  ANSIWHITE="\e[1;37m"
+
+
+function ApplyMessageColor() {
+  #
+  # Wraps the message in the specified colour
+  # 
+  # Usage:  ApplyMessageColor  ColorVarName Message...
+  # 
+  # ColorVarName is the name of a variable whose value is the ANSI sequence
+  # enabling a colour. If the variable name is empty, no colour will be applied,
+  # but the colour will still be reset at the end of the message.
+  # 
+  # Some conditional colour names are declared in SetColors().
+  #
+  local ColorName="$1"
+  shift
+  echo -e "${ColorName:+${!ColorName}}${*}${ResetColor}"
+} # ApplyMessageColor()
+
 
 
 # functions are always redefined
@@ -168,13 +232,24 @@ function STDERR() {
   echo -e "$*" >&2
 } # STDERR()
 
+function STDERRCOLOR() {
+  #
+  # Usage:  STDERR string [string ...]
+  # 
+  # Prints a string on standard error.
+  #
+  local ColorName="$1"
+  shift
+  echo -e "$(ApplyMessageColor '$ColorName' "$@")" >&2
+} # STDERRCOLOR()
+
 function INFO() {
   #
   # Usage:  INFO  message
   # 
   # Prints a message on standard error (highlighted).
   #
-  STDERR "${InfoColor}$*${ResetColor}"
+  STDERRCOLOR InfoColor "$*"
 } # INFO()
 
 function WARN() {
@@ -183,7 +258,7 @@ function WARN() {
   # 
   # Prints an warning message on standard error.
   #
-  STDERR "${WarnColor}Warning: $*${ResetColor}"
+  STDERRCOLOR WarnColor "Warning: $*"
 } # WARN()
 
 function ERROR() {
@@ -192,7 +267,7 @@ function ERROR() {
   # 
   # Prints an error message on standard error.
   #
-  STDERR "${ErrorColor}Error: $*${ResetColor}"
+  STDERRCOLOR ErrorColor "Error: $*"
 } # ERROR()
 
 function FATAL() {
@@ -212,7 +287,7 @@ function FATAL() {
   # 
   local Code="$1"
   shift
-  STDERR "${FatalColor}Fatal error (${Code}): $*${ResetColor}"
+  STDERRCOLOR FatalColor "Fatal error (${Code}): $*"
   if isSourcing ; then
     return $Code
   else
@@ -233,25 +308,25 @@ function LASTFATAL() {
 
 
 function SetColors() {
-	# call this after you know if you want colours or not
+  # call this after you know if you want colours or not
   local UseColors="${1:-${USECOLORS:-1}}"
-	if isFlagSet UseColors ; then
-		DBGN 10 "Setting output colors..."
-		ErrorColor="$ANSIRED"
-		FatalColor="$ANSIRED"
-		WarnColor="$ANSIYELLOW"
-		DebugColor="$ANSIGREEN"
-		InfoColor="$ANSICYAN"
-		ResetColor="$ANSIRESET"
-	else
-		DBGN 10 "Unsetting output colors..."
-		ErrorColor=
-		FatalColor=
-		WarnColor=
-		DebugColor=
-		InfoColor=
-		ResetColor=
-	fi
+  if isFlagSet UseColors ; then
+    DBGN 10 "Setting output colors..."
+    ErrorColor="$ANSIRED"
+    FatalColor="$ANSIRED"
+    WarnColor="$ANSIYELLOW"
+    DebugColor="$ANSIGREEN"
+    InfoColor="$ANSICYAN"
+    ResetColor="$ANSIRESET"
+  else
+    DBGN 10 "Unsetting output colors..."
+    ErrorColor=
+    FatalColor=
+    WarnColor=
+    DebugColor=
+    InfoColor=
+    ResetColor=
+  fi
 } # SetColors()
 
 
@@ -743,6 +818,7 @@ function RemoveDuplicatesFromPath() {
   return 0
 } # RemoveDuplicatesFromPath()
 
+
 function PurgeDuplicatesFromPath() {
   #
   # PurgeDuplicatesFromPath VarName [Separator]
@@ -757,7 +833,7 @@ function PurgeDuplicatesFromPath() {
 
 
 #-------------------------------------------------------------------------------
-#---  Path manipulation
+#---  path queries
 #---
 
 function isDirUnder() {
@@ -780,6 +856,33 @@ function isDirUnder() {
   DBGN 2 "  => YES!"
   return 0
 } # isDirUnder()
+
+
+function SubpathTo() {
+  # 
+  # Usage:  SubpathTo Dir ParentDir 
+  # 
+  # returns success if Dir is a subdirectory of ParentDir, like isDirUnder;
+  # in addition to isDirUnder, on success it prints the relative path from
+  # ParentDir to Dir
+  # 
+  local Dir="$1"
+  local ParentDir="$2"
+  [[ -z "$ParentDir" ]] && return 1
+  
+  local RelPath
+  DBGN 2 "Is '${Dir}' under '${ParentDir}'?"
+  local FullDir="$(MakeAbsolutePath "$Dir")"
+  while [[ ! "$FullDir" -ef "$ParentDir" ]]; do
+    [[ "$FullDir" == '/' ]] && return 1
+    RelPath="$(basename "$FullDir")${RelPath:+"/${RelPath}"}"
+    FullDir="$(dirname "$FullDir")"
+    DBGN 3 "  - now check: '${FullDir}'"
+  done
+  DBGN 2 "  => YES!"
+  echo "$RelPath"
+  return 0
+} # SubpathTo()
 
 
 
@@ -816,8 +919,13 @@ function isMakeDirectory() {
   # from cmake or otherwise.
   #
   
-  local Dir="$1"
-  [[ -r "${Dir}/Makefile" ]] || [[ -r "${Dir}/GNUmakefile" ]]
+  local -r Dir="$1"
+  [[ -d "$Dir" ]] || return 3
+  local MakefileName
+  for MakefileName in 'Makefile' 'GNUmakefile' ; do
+    [[ -r "${Dir}/${MakefileName}" ]] && return 0
+  done
+  return 1
   
 } # isMakeDirectory()
 
@@ -842,6 +950,18 @@ function isNinjaDirectory() {
   return 0
   
 } # isNinjaDirectory()
+
+function isCompilableDirectory() {
+  #
+  # Usage:  isCompilableDirectory  Directory
+  #
+  # Returns whether the specified directory is a build directory with any of
+  # the known build systems that can compile it singularly (e.g. not ninja).
+  #
+  local Dir="$1"
+  isMakeDirectory "$1"
+  
+} # isCompilableDirectory()
 
 function isBuildDirectory() {
   #
