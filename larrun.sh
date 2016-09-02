@@ -62,12 +62,15 @@
 #     added options to valgrind memcheck command
 # 1.26 (petrillo@fnal.gov)
 #     added `ups active` output to the log
+# 1.27 (petrillo@fnal.gov)
+#     added --iprofiler option;
+#     removed '-V' alias for '--version' (conflicted with valgrind short option)
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.26"
+SCRIPTVERSION="1.27"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -216,17 +219,25 @@ function help() {
 	    to --prependopts=ProfileOptionString
 	--valgrind[=ProfileOptionString], -V
 	    equivalent to --prepend=valgrind or --profile=valgrind: uses valgrind
-	    memory analyser; the optional ProfileOptionString string will be added in
+	    analyser; the optional ProfileOptionString string will be added in
 	    a way equivalent to --prependopts=ProfileOptionString
 	--massif[=ProfileOptionString]
 	    uses valgrind's massif tool for memory allocation profiling;
 	    equivalent to --valgrind='--tool=massif'
+	--iprofiler[=ProfileOptionString]
+	    equivalent to --prepend=iprofiler or --profile=iprofiler: uses Apple
+	    iprofiler running "timeprofiler" tool; the optional ProfileOptionString
+	    string will be added in a way equivalent to;
+	    NOTE: OSX might ask interactively for administrator authentication
+	    --prependopts=ProfileOptionString
+	--profilefor=TIME [${DefaultProfileTime}]
+	    time while profiling (e.g. 10s); supported only by iprofiler
 	--stack
 	    enables stack profiling if the tool supports it (if not, will complain)
 	--mmap
 	    enables more general heap profiling (mmap) if the tool supports it (if
 	    not, will complain)
-	--version , -V
+	--version
 	    prints the script version
 	EOH
 } # help()
@@ -690,6 +701,19 @@ function SetupProfiler() {
 				( * ) FATAL 1 "Unsupported profiling tool for ${Profiler}: '${ProfilerTool}'" ;;
 			esac
 			;;
+		( 'iprofiler' )
+			PrependExecutable='iprofiler'
+			
+			: ${ProfilerTool:='iprofiler'}
+      : ${ProfileTime:=${DefaultProfileTime}}
+			local BaseOutputFile="${JobName}-${ProfilerTool}"
+			PrependExecutableParameters=( "${ProfilerToolParams[@]}"
+				"-${ProfilerTool}"
+				-T "$ProfileTime" 
+				-o "$BaseOutputFile"
+				)
+			;;
+		
 		( '' ) ;; # rely on the existing variables, no special setup
 		( * ) return 1 ;;
 	esac
@@ -1075,13 +1099,14 @@ declare -a AppendConfigFiles
 declare -a AppendConfigLines
 declare -a DebugModules
 declare -i OneStringCommand=0
+declare DefaultProfileTime="$((7 * 24 * 3600))s" # no more than one week
 declare DumpConfigMode="Yes"
 for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
 	if ! isFlagSet NoMoreOptions && [[ "${Param:0:1}" == '-' ]]; then
 		case "$Param" in
 			( '--help' | '-h' | '-?' )     DoHelp=1  ;;
-			( '--version' | '-V' )         DoVersion=1  ;;
+			( '--version' )                DoVersion=1  ;;
 			( '--debug' )                  DEBUG=1  ;;
 			( '--debug='* )                DEBUG="${Param#--*=}" ;;
 			( '-d' )                       let ++iParam ; DEBUG="${!iParam}" ;;
@@ -1211,6 +1236,22 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 				ProfilerTool="memory"
 				ProfilerToolParams=( "${Param#--*=}" )
 				[[ "$Param" =~ = ]] && ProfilerToolParams=( "${Param#--*=}" )
+				;;
+			
+			#
+			# Apple iprofiler
+			( '--iprofiler' )
+				Profiler="iprofiler"
+				ProfilerTool="timeprofiler"
+				;;
+			( '--iprofiler='* )
+				Profiler="iprofiler"
+				
+				: ${ProfilerTool:="timeprofiler"}
+				ProfilerToolParams=( "${Param#--*=}" )
+				;;
+			( '--profilefor='* )
+				ProfileTime="${Param#--*=}"
 				;;
 			
 			### other stuff
