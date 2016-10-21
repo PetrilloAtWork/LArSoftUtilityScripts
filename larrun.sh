@@ -65,6 +65,8 @@
 # 1.27 (petrillo@fnal.gov)
 #     added --iprofiler option;
 #     removed '-V' alias for '--version' (conflicted with valgrind short option)
+# 1.28 (petrillo@fnal.gov)
+#     added --samplingperiod option for iprofiler
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
@@ -96,6 +98,12 @@ DATETAG="$(date '+%Y%m%d')"
 # rate of detailed snapshots
 # (e.g. 10: 1 detailed every 10 snapshots; 1: every snapshot is detailed)
 : ${MASSIF_DETAILEDFREQ:="1"}
+
+
+# no more than one week
+: ${DefaultProfileTime:="$((7 * 24 * 3600))s"}
+# period of sampling (iprofiler): 10 ms
+: ${DefaultProfileSamplingPeriod:="10ms"}
 
 declare -i NPostProcessWriters=0
 
@@ -232,6 +240,8 @@ function help() {
 	    --prependopts=ProfileOptionString
 	--profilefor=TIME [${DefaultProfileTime}]
 	    time while profiling (e.g. 10s); supported only by iprofiler
+	--samplingperiod=PERIOD [${DefaultProfileSamplingPeriod}]
+	    sampling period for iprofiler (e.g. '10ms', '1s', '100us')
 	--stack
 	    enables stack profiling if the tool supports it (if not, will complain)
 	--mmap
@@ -705,11 +715,13 @@ function SetupProfiler() {
 			PrependExecutable='iprofiler'
 			
 			: ${ProfilerTool:='iprofiler'}
-      : ${ProfileTime:=${DefaultProfileTime}}
+			: ${ProfileTime:=${DefaultProfileTime}}
+			: ${ProfileSamplingPeriod:=${DefaultProfileSamplingPeriod}}
 			local BaseOutputFile="${JobName}-${ProfilerTool}"
 			PrependExecutableParameters=( "${ProfilerToolParams[@]}"
 				"-${ProfilerTool}"
 				-T "$ProfileTime" 
+				-I "$ProfileSamplingPeriod"
 				-o "$BaseOutputFile"
 				)
 			;;
@@ -1099,7 +1111,6 @@ declare -a AppendConfigFiles
 declare -a AppendConfigLines
 declare -a DebugModules
 declare -i OneStringCommand=0
-declare DefaultProfileTime="$((7 * 24 * 3600))s" # no more than one week
 declare DumpConfigMode="Yes"
 for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
@@ -1252,6 +1263,9 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 				;;
 			( '--profilefor='* )
 				ProfileTime="${Param#--*=}"
+				;;
+			( '--samplingperiod='* )
+				ProfileSamplingPeriod="${Param#--*=}"
 				;;
 			
 			### other stuff
