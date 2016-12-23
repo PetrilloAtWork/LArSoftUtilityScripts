@@ -27,11 +27,13 @@
 # 20160830 (petrillo@fnal.gov) [v2.4]
 #   added --ifhaslocalbranch option;
 #   --ifhasbranch now looks also to remote branches
+# 20161223 (petrillo@fnal.gov) [v2.5]
+#   update for bash 4.4.5 (changed `declare -p` output on arrays)
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
 BASESCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-BASESCRIPTVERSION="2.4"
+BASESCRIPTVERSION="2.5"
 
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
@@ -333,6 +335,29 @@ function Pager() {
 	"$PagerProgram" "${PagerOptions[@]}"
 } # Pager()
 
+function ProcessDeclareArray() {
+	#
+	# Transforms the output of a declare -p on an array into the declaration of
+	# the content of an array, in the form:
+	#
+	#  [0]='value' [1]='value' ...
+	#
+	# (one heading and one trailing space are also output)
+	#
+	local DeclarePrint="$1"
+	#
+	# The expected pattern is something like:
+	#
+	#   declare [some flags] [maybe more flags] ArrayName=([0]="value" [1]="value" ... [N]="value")
+	#
+	# In bash (somewhere) before 4.4.5, there were single quotes before and after
+	# the parentheses.
+	# 
+	local DeclarePattern='^declare( -[[:alnum:]]+)* [[:alnum:]_]+='\''?\((.*)\)'\''?$'
+	[[ "$DeclarePrint" =~ $DeclarePattern ]]
+	echo " ${BASH_REMATCH[2]} "
+} # ProcessDeclareArray()
+
 
 function ReturnNamedArray() {
 	# Callee-side implementation for communicating arrays.
@@ -364,7 +389,7 @@ function ReturnNamedArray() {
 	local -r Result="$(declare -p "$ArrayName")"
 	# remove the "declare" part and the brackets
 	local -r ArrayValue="${Result#declare* ${ArrayName}=}"
-	echo " ${ArrayValue:2:${#ArrayValue}-4} "
+        ProcessDeclareArray "$Result"
 } # ReturnNamedArray()
 
 
