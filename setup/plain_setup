@@ -124,6 +124,30 @@ function DoPlainSetup() {
 			local setup_base_script
 			[[ -d "/grid/fermiapp" ]] && setup_base_type="local"
 			
+			# 
+			# We have a fallback setup mode (":golocal:") that intervenes when the
+			# "official" setup script is not available.
+			# The UPS database list (the one in PRODUCTS) must *not* change after
+			# MRB is set up (and in general after anything but UPS is set up).
+			# That is because MRB depends e.g. on cetpkgsupport, which LArSoft also
+			# depends on. If MRB is set up it sets up cetpkgsupport from one of the
+			# current UPS databases. If afterwards LArSoft is set up, it will try to
+			# first set up cetpkgsupport from the newest repository (in PRODUCTS
+			# order) which has it. If that repository is the same as the active
+			# cetpkgsupport, then UPS claims the package is already set up and is
+			# happy; otherwise, it claims conflict, because the two products could be
+			# different (even if they are not supposed to, since they bring the same
+			# version number, but after all MRB-built local products fall exactly in
+			# this gray class).
+			# 
+			# This rule can be violated if the new UPS databases are guaranteed to
+			# be consulted only after all the ones the active UPS products come from.
+			# 
+			# Otherwise, the procedure that sets up packages from a newer UPS database
+			# must make sure it unsetups all the active packages that also exist in
+			# the newer database. This is what mrbsetenv does.
+			#
+			
 			case "$setup_experiment" in
 				( 'MicroBooNE' )
 					# MicroBooNE setup adds to the above a specific UPS repository
@@ -190,12 +214,38 @@ function DoPlainSetup() {
 					;;
 			esac
 			
+			# no UPS setup beyond this point, unless previous UPS package set up failed...
+			
+			# ... except the fallback, because it goes lowest in the priority list
+			# set up UPS repositories used only as fallback
+			Setup UPS_fallback  >& >(sed -e "s/^/    [${nOutput}> /")
+			
 			if [[ "$setup_base_script" == ":golocal:" ]]; then
 				# this is experiment-agnostic setup:
 				echo " * local LArSoft setup"
 				# hope "Setup UPS_local" means something in your system...
 				let ++nOutput
+				
+				function _AddCVMFSUPS() {
+					local BaseDir="$1"
+					shift
+					local ProductDir
+					for ProductDir in "$@" ; do
+						local ProductPath="${BaseDir}/${ProductDir}"
+						[[ -d "$ProductPath" ]] || continue
+						echo "Configuring CVMFS UPS repository '${ProductPath}'"
+						PRODUCTS="${PRODUCTS}:${ProductPath}"
+					done
+					export PRODUCTS
+				} # _AddCVMFSUPS()
+				
+				# adding experiment-specific repositories from CVMFS as low priority
+				_AddCVMFSUPS "/cvmfs/oasis.opensciencegrid.org" "/cvmfs/fermilab.opensciencegrid.org" "dune/products" "microboone/products"
+				
 				Setup UPS_local  >& >(sed -e "s/^/    [${nOutput}> /")
+				
+				# set up UPS again, in case some newer version has become available
+				setup ups || let ++nErrors
 				
 				# prefer git[flow] shipped with UPS, but accept the system one as backup
 				setup git && setup gitflow
@@ -205,29 +255,10 @@ function DoPlainSetup() {
 				# set up MRB (current version)
 				setup mrb || let ++nErrors
 				export MRB_PROJECT=larsoft
+			else
+				# set up UPS again, in case some newer version has become available
+				setup ups || let ++nErrors
 			fi
-			
-			function _AddCVMFSUPS() {
-				local BaseDir="$1"
-				shift
-				local ProductDir
-				for ProductDir in "$@" ; do
-					local ProductPath="${BaseDir}/${ProductDir}"
-					[[ -d "$ProductPath" ]] || continue
-					echo "Configuring CVMFS UPS repository '${ProductPath}'"
-					PRODUCTS="${PRODUCTS}:${ProductPath}"
-				done
-				export PRODUCTS
-			} # _AddCVMFSUPS()
-			
-			# adding experiment-specific repositories from CVMFS as low priority
-			_AddCVMFSUPS "/cvmfs/oasis.opensciencegrid.org" "/cvmfs/fermilab.opensciencegrid.org" "dune/products" "microboone/products"
-			
-			# set up UPS repositories used only as fallback
-			Setup UPS_fallback  >& >(sed -e "s/^/    [${nOutput}> /")
-			
-			# set up UPS again, in case some newer version has become available
-			setup ups || let ++nErrors
 			
 			# export the setup and unsetup functions from UPS
 			export -f setup unsetup
