@@ -27,11 +27,16 @@
 # 20160811 (petrillo@fnal.gov)
 #   bug fixed: aligned repository name in compact output now takes the overhead
 #     of the string due to highlight (if any)
+# 20160830 (petrillo@fnal.gov) [v2.4]
+#   added --ifhaslocalbranch option;
+#   --ifhasbranch now looks also to remote branches
+# 20161223 (petrillo@fnal.gov) [v2.5]
+#   update for bash 4.4.5 (changed `declare -p` output on arrays)
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
 BASESCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-BASESCRIPTVERSION="2.3"
+BASESCRIPTVERSION="2.5"
 
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
@@ -119,9 +124,11 @@ function help_baseoptions() {
 	    acts only on repositories whose current branch is BRANCHNAME; it can be
 	    specified more than once, in which case the operation will be performed
 	    if the current branch is any one of the chosen branches
-	--ifhasbranch=BRANCHNAME
+	--ifhasbranch=BRANCHNAME , --ifhaslocalbranch=BRANCHNAME
 	    similar to '--ifcurrentbranch' above, performs the action only if the
-	    repository has one of the specified branches
+	    repository has one of the specified branches; the first form checks all
+	    branches, including the remote ones, while the second checks only local
+	    ones
 	--only=REGEX
 	    operates only on the repositories whose name matches the specified REGEX
 	--skip=REGEX
@@ -332,6 +339,29 @@ function Pager() {
 	"$PagerProgram" "${PagerOptions[@]}"
 } # Pager()
 
+function ProcessDeclareArray() {
+	#
+	# Transforms the output of a declare -p on an array into the declaration of
+	# the content of an array, in the form:
+	#
+	#  [0]='value' [1]='value' ...
+	#
+	# (one heading and one trailing space are also output)
+	#
+	local DeclarePrint="$1"
+	#
+	# The expected pattern is something like:
+	#
+	#   declare [some flags] [maybe more flags] ArrayName=([0]="value" [1]="value" ... [N]="value")
+	#
+	# In bash (somewhere) before 4.4.5, there were single quotes before and after
+	# the parentheses.
+	# 
+	local DeclarePattern='^declare( -[[:alnum:]]+)* [[:alnum:]_]+='\''?\((.*)\)'\''?$'
+	[[ "$DeclarePrint" =~ $DeclarePattern ]]
+	echo " ${BASH_REMATCH[2]} "
+} # ProcessDeclareArray()
+
 
 function ReturnNamedArray() {
 	# Callee-side implementation for communicating arrays.
@@ -363,7 +393,7 @@ function ReturnNamedArray() {
 	local -r Result="$(declare -p "$ArrayName")"
 	# remove the "declare" part and the brackets
 	local -r ArrayValue="${Result#declare* ${ArrayName}=}"
-	echo " ${ArrayValue:2:${#ArrayValue}-4} "
+        ProcessDeclareArray "$Result"
 } # ReturnNamedArray()
 
 
@@ -772,6 +802,29 @@ function GetLocalBranches() {
 } # GetLocalBranches()
 
 
+function GetRemoteBranches() {
+	# Usage:  GetRemoteBranches  [RepoDir]
+	#
+	# Each branch name is prepended by its remote repository
+	#
+	local RepoDir="$1"
+	
+	if [[ -n "$RepoDir" ]]; then
+		pushd "$RepoDir" > /dev/null || return $?
+	fi
+	
+	# list all the head references (no tags) from remote repositories;
+	# the format is: <commit><tab>ref/heads/<remoteRepo>/<branch/path>
+	# and the following line reports the "<remoteRepo>/<branch/path>", one per line;
+	# git also prints which remote references come from into stderr, which we discard
+	git ls-remote --heads 2> /dev/null | sed -E -e 's@.*[[:blank:]]+refs/heads/@@g'
+	
+	[[ -n "$RepoDir" ]] && popd > /dev/null
+	return 0
+
+} # GetRemoteBranches()
+
+
 function isGoodRepo() {
 	local Dir="$1"
 	[[ -d "$Dir" ]] || return 1
@@ -792,6 +845,8 @@ function isGoodRepo() {
 	if [[ "${#OnlyIfHasBranches[@]}" -gt 0 ]]; then
 		local -a AllBranches=( $(GetLocalBranches "$Dir") )
 		DBGN 2 "${#AllBranches[@]} local branches of ${RepoName}: ${AllBranches[@]}"
+		isFlagSet OnlyLocalBranches || AllBranches=( "${AllBranches[@]}" $(GetRemoteBranches "$Dir") )
+		DBGN 2 "${#AllBranches[@]} branches of ${RepoName}: ${AllBranches[@]}"
 		
 		anyInList -- "${OnlyIfHasBranches[@]}" -- "${AllBranches[@]}" || return 1
 	fi
@@ -914,6 +969,7 @@ function SetDefaultOptions() {
 	NoMoreOptions=0
 	AutodetectCommand=0
 	SkipEmptyOutput=0
+	OnlyLocalBranches=0
 	ProgramName=""
 	ProgramArgs=( )
 	OnlyIfCurrentBranches=( )
@@ -984,6 +1040,10 @@ function StandardOptionParser() {
 			;;
 		( '--ifhasbranch='* )
 			OnlyIfHasBranches=( "${OnlyIfHasBranches[@]}" "${Param#--*=}" )
+			;;
+		( '--ifhaslocalbranch='* )
+			OnlyIfHasBranches=( "${OnlyIfHasBranches[@]}" "${Param#--*=}" )
+			OnlyLocalBranches=1
 			;;
 		( '--only='* )
 			OnlyRepos=( "${OnlyRepos[@]}" "${Param#--*=}" )

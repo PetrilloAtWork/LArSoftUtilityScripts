@@ -21,7 +21,7 @@ fi
 ( # subshell, protect from sourcing
 
 SCRIPTNAME="$(basename -- "$0")"
-SCRIPTVERSION="1.1"
+SCRIPTVERSION="1.2"
 
 declare -ar SkipRepositories=( 'ubutil' 'lbneutil' )
 
@@ -408,8 +408,10 @@ declare LocalProductsPath="${MRB_TOP}/${LocalProductsDirName}"
 if [[ -n "$local_updatearea_SourceMe" ]]; then
 	cat <<-EOS > "$local_updatearea_SourceMe"
 	source '${LocalProductsPath}/setup'
-	[[ $? != 0 ]] && return $?
-	export PRODUCTS="\$(sed -E -e "s@(:|^)${MRB_INSTALL}(:|$)@@g" <<< "${PRODUCTS}")"
+	[[ \$? != 0 ]] && return \$?
+	export PRODUCTS="\$(sed -E -e "s@:${MRB_INSTALL}:@:@g" -e "s@(:|^)${MRB_INSTALL}(:|$)@@g" <<< "\${PRODUCTS}")"
+	echo "PRODUCTS set to:"
+	tr ':' $'\n' <<< "\$PRODUCTS"
 	EOS
 fi
 
@@ -434,7 +436,7 @@ fi
 LocalProductsLink="${MRB_TOP}/localProducts"
 if [[ ! -e "$LocalProductsLink" ]] || [[ -h "$LocalProductsLink" ]]; then
 	ExecCommand rm -f "$LocalProductsLink"
-	ExecCommand ln -s "$LocalProductsDirName" "$LocalProductsLink" && echo "Updated 'localPrducts' link."
+	ExecCommand ln -s "$LocalProductsDirName" "$LocalProductsLink" && echo "Updated 'localProducts' link."
 else
 	ERROR "Can't update localProduct since it does exist and it's not a link"
 fi
@@ -463,7 +465,7 @@ else  # sourcing
 	if [[ -n "$local_updatearea_SourceMe" ]]; then
 		if [[ -s "$local_updatearea_SourceMe" ]]; then
 			echo "Sourcing the local products setup for you."
-			source "$local_updatearea_SourceMe" | sed -e 's/^/| /'
+			source "$local_updatearea_SourceMe"  # | sed -e 's/^/| /'
 			echo "All done."
 		fi
 		rm -f "$local_updatearea_SourceMe"

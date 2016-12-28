@@ -8,22 +8,22 @@
 #   original version (not numbered)
 # 20160519 (petrillo@fnal.gov) [v1.1] 
 #   added ability to descend, debug message infrastructure, and a version number
+# 20160826 (petrillo@fnal.gov) [v1.2] 
+#   updated to use larsoft_scriptutils
 #
 #
 
-declare -r SCRIPTNAME="$(basename "$0")"
-declare -r SCRIPTVERSION="1.1"
 
-declare -r ANSICYAN="\e[1;36m"
-declare -r ANSIYELLOW="\e[1;33m"
-declare -r ANSIRED="\e[1;31m"
-declare -r ANSIGREEN="\e[32m"
-declare -r ANSIRESET="\e[0m"
+hasLArSoftScriptUtils >& /dev/null || source "${LARSCRIPTDIR}/larsoft_scriptutils.sh"
+mustNotBeSourced || return 1
 
-declare -r DEBUGCOLOR="$ANSIGREEN"
-declare -r WARNCOLOR="$ANSIYELLOW"
-declare -r ERRORCOLOR="$ANSIRED"
-declare -r FATALCOLOR="$ANSIRED"
+
+SCRIPTNAME="$(basename "$0")"
+SCRIPTDIR="$(dirname "$0")"
+CWD="$(pwd)"
+
+declare -r SCRIPTVERSION="1.2"
+
 
 ###############################################################################
 function Help() {
@@ -61,78 +61,6 @@ function Help() {
 } # Help()
 
 ###############################################################################
-function STDERR() { echo "$*" >&2 ; }
-
-function ApplyColor() {
-	local ColorName="$1"
-	shift
-	if [[ -n "$ColorName" ]]; then
-		echo -e "${!ColorName}${*}${ANSIRESET}"
-	else
-		echo "$*"
-	fi
-} # ApplyColor()
-
-function STDERRCOLOR() { STDERR "$(ApplyColor "$@")" ; }
-
-function ERROR() { STDERRCOLOR ERRORCOLOR "ERROR: $*" ; }
-
-function FATAL() {
-	local Code="$1"
-	shift
-	STDERRCOLOR FATALCOLOR "FATAL ERROR (${Code}): $*"
-	exit $Code
-} # FATAL()
-
-function LASTFATAL() {
-	local -i Code="$?"
-	[[ $Code == 0 ]] || FATAL "$Code" "$@"
-} # LASTFATAL()
-
-function isDebugging() {
-	local -i Level="${1:-1}"
-	[[ -n "$DEBUG" ]] && [[ $DEBUG -ge $Level ]]
-} # isDebugging()
-
-function DBGN() {
-	local Level="$1"
-	shift
-	isDebugging "$Level" && STDERRCOLOR DEBUGCOLOR "DBG[${Level}]| $*"
-} # DBGN()
-
-function DBG() { DBGN 1 "$@" ; }
-
-function isFlagSet() {
-	local VarName="$1"
-	[[ -n "${!VarName//0}" ]]
-} # isFlagSet()
-
-function isFlagUnset() {
-	local VarName="$1"
-	[[ -z "${!VarName//0}" ]]
-} # isFlagUnset()
-
-function anyFlagSet() {
-	local FlagName
-	for FlagName in "$@" ; do
-		isFlagSet "$FlagName" && return 0
-	done
-	return 1
-} # anyFlagSet()
-
-function Max() {
-	[[ $# == 0 ]] && return 1
-	local -i max="$1"
-	local -i elem
-	for elem in "$@" ; do
-		[[ $elem -gt $max ]] && max="$elem"
-	done
-	echo "$max"
-	return 0
-} # Max()
-
-###############################################################################
-
 
 function PrintHeader() {
 	# Prints a header with the specified color
@@ -144,10 +72,6 @@ function PrintHeader() {
 	local -r Level="$1"
 	shift
 	local -ir FieldWidth="${1:-${COLUMNS:-80}}"
-	
-	local HighlightColor="${!ColorVarName}"
-	local ResetColor="$ANSIRESET"
-	[[ -z "$HighlightColor" ]] && ResetColor=""
 	
 	local -r LeftPad="- * "
 	local -r RightPad=" * -"
@@ -181,33 +105,8 @@ function PrintHeader() {
 		PaddingRight+="$RightPad"
 	done
 	
-	echo -e "${HighlightColor}${PaddingLeft}  ${Content}  ${PaddingRight}${ResetColor}"
+	echo -e "$(ApplyMessageColor "$ColorVarName" "${PaddingLeft}  ${Content}  ${PaddingRight}")"
 } # PrintHeader()
-
-
-function HasMakefile() {
-	local -r Dir="$1"
-	[[ -d "$Dir" ]] || return 3
-	local MakefileName
-	for MakefileName in Makefile GNUmakefile ; do
-		[[ -r "${Dir}/${MakefileName}" ]] && return 0
-	done
-	return 1
-} # HasMakefile()
-
-
-function CanBeCompiled() {
-	local DirPath="${1:-.}"
-	HasMakefile "$DirPath" || return 1
-	return 0
-} # CanBeCompiled()
-
-function CanCompileDirectory() {
-	local DirPath="${1:-.}"
-	CanBeCompiled "$DirPath" || return 1
-	HasMakefile "$DirPath" || return 1
-	return 0
-} # CanCompileDirectory()
 
 
 function CompileSingleDir() {
@@ -235,7 +134,7 @@ function CompileAllDirs() {
 	local -i Level="$1"
 	local Dir="$2"
 	
-	if ! CanCompileDirectory "$Dir" ; then
+	if ! isCompilableDirectory "$Dir" ; then
 		ERROR "Make system in use does not support per-directory make${Dir:+" under '${Dir}'"}: skipped (treated as failure!)"
 		PrintHeader ERRORCOLOR "Compilation${Dir:+" in '${Dir}'"} skipped" "$Level"
 		Failures[${#Failures[@]}]="${Dir:-.}"
@@ -269,7 +168,7 @@ function CompileAllDirs() {
 		local SubPath="${Dir:+${Dir%/}/}${SubDir}"
 		DBGN 4 "Considering: '${SubPath}'"
 		[[ -d "$SubPath" ]] || continue
-		CanBeCompiled "$SubPath" || continue
+		isCompilableDirectory "$SubPath" || continue
 		SubDirs[NSubDirs++]="$SubPath"
 	done < <( ls "${Dir:-.}" )
 	
@@ -354,34 +253,49 @@ declare -a Failures
 declare -ia NFailures=( 0 )
 
 for BaseDir in "${BaseDirs[@]}" ; do
-	CompileAllDirs 0 "$BaseDir"
-	res=$?
-	[[ $res != 0 ]] && isFlagUnset KeepGoing && break
+  
+  # try to jump to build area
+  if ! isCompilableDirectory "$BaseDir" && ! isMRBBuildArea "$BaseDir" ; then
+  DBGN 1 "'${BaseDir}': not a compilable directory, and not under MRB_BUILDDIR"
+    if isMRBSourceArea "$BaseDir" ; then
+      DBGN 2 "'${BaseDir}': source area! try to jump to build area"
+      RelPath="$(SubpathTo "$BaseDir" "$MRB_SOURCE")"
+      if [[ $? == 0 ]]; then
+        BaseDir="${MRB_BUILDDIR}${RelPath:+/${RelPath}}"
+        DBGN 1 "jumping => '${BaseDir}'"
+      else
+        DBGN 2 "Failed. Let's go on and crash."
+      fi
+    fi
+  fi
+  
+  
+  CompileAllDirs 0 "$BaseDir"
+  res=$?
+  [[ $res != 0 ]] && isFlagUnset KeepGoing && break
 done
 
 declare -i NLevels="$(Max ${#NFailures[@]} ${#NSuccesses[@]} )"
 
 declare -i NDirs=$((NSuccesses + NFailures))
 if [[ $NFailures == 0 ]]; then
-	echo "All ${NDirs} directories successfully compiled."
+  echo "All ${NDirs} directories successfully compiled."
 else
-	if [[ "$NLevels" == 1 ]]; then
-		echo "${NSuccesses}/${NDirs} directories successfully compiled, ${NFailures} compilations failed:"
-	else
-		echo "Descended down to ${NLevels} levenls because of failures:"
-		for (( iLevel = 0 ; iLevel < $NLevels ; ++iLevel )); do
-			echo "  - level $((iLevel+1)): ${NSuccesses[iLevel]:-0} succeeded, ${NFailures[iLevel]:-0} failed"
-		done
-		echo "Failures reported in:"
-	fi
-	for Failure in "${Failures[@]}" ; do
-		echo "$Failure"
-	done
+  if [[ "$NLevels" == 1 ]]; then
+    echo "${NSuccesses}/${NDirs} directories successfully compiled, ${NFailures} compilations failed:"
+  else
+    echo "Descended down to ${NLevels} levenls because of failures:"
+    for (( iLevel = 0 ; iLevel < $NLevels ; ++iLevel )); do
+      echo "  - level $((iLevel+1)): ${NSuccesses[iLevel]:-0} succeeded, ${NFailures[iLevel]:-0} failed"
+    done
+    echo "Failures reported in:"
+  fi
+  for Failure in "${Failures[@]}" ; do
+    echo "$Failure"
+  done
 fi
 if isFlagSet KeepGoing ; then
-	exit ${#Failures[@]}
+  exit ${#Failures[@]}
 else
-	exit $res
+  exit $res
 fi
-
-

@@ -61,6 +61,21 @@ function _SortUPSqualifiers() {
 } # _SortUPSqualifiers()
 
 
+function _PurgeDuplicatesFromPath() {
+	local PathName="$1"
+	shift
+	local -a Unique=( )
+	local NewPath=""
+	local PathElem
+	while read PathElem ; do
+		_IsInList "$PathElem" "${Unique[@]}" && continue
+		Unique=( "${NewPath[@]}" "$PathElem" )
+		NewPath="${NewPath:+"${NewPath}:"}${PathElem}"
+	done <<< "${!PathName//:/$'\n'}"
+	eval "export ${PathName}='${NewPath}'"
+} # _PurgeDuplicatesFromPath()
+
+
 function DoPlainSetup() {
 	################################################################################
 	###
@@ -262,6 +277,7 @@ function DoPlainSetup() {
 				echo "No ${setup_script} found. Only official packages will be used!" >&2
 				return 1
 			fi
+			_PurgeDuplicatesFromPath PRODUCTS
 			return 0
 			;; # local products
 		
@@ -359,7 +375,7 @@ function DoPlainSetup() {
 function DoPlainSetup_Wrapper() {
 	DoPlainSetup "$@"
 	local -i res=$?
-	unset -f DoPlainSetupi{,_Wrapper} _IsInList _SortUPSqualifiers _AddCVMFSUPS
+	unset -f DoPlainSetupi{,_Wrapper} _IsInList _SortUPSqualifiers _PurgeDuplicatesFromPath _AddCVMFSUPS
 	return $res
 } # DoPlainSetup_Wrapper()
 

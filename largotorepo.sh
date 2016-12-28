@@ -6,6 +6,8 @@
 # Changes:
 # 20160810 (petrillo@fna.gov) [v1.2]
 #   using larsoft_scriptutils.sh
+# 20161115 (petrillo@fna.gov) [v1.3]
+#   added the possibility to directly enter subdirectories
 #
 
 hasLArSoftScriptUtils >& /dev/null || source "${LARSCRIPTDIR}/larsoft_scriptutils.sh"
@@ -14,7 +16,7 @@ mustNotBeSourced || return 1
 
 ################################################################################
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.2"
+SCRIPTVERSION="1.3"
 CWD="$(pwd)"
 
 function help() {
@@ -25,6 +27,11 @@ function help() {
 	Usage:  ${SCRIPTNAME}  [options] [Skip]
 	
 	It goes Skip repositories ahead, and prints the full path of the repository.
+	If Skip is a repository name (as opposed to a number), it is entered directly.
+	If the current directory is in the build area, the destination directory will
+	also be in the build area; otherwise it will be in the source area.
+	If Skip is a path, the first element of the path is assumed to be the
+	repository name and the rest a subpath to enter inside the repository.
 	
 	Options
 	--basedir=BASEDIR [${MRB_SOURCE:-.}]
@@ -130,10 +137,16 @@ function FindRepository() {
 	# Usage:  FindRepository  BaseDir RepoNameHint
 	local BaseDir="$1"
 	local RepoNameHint="$2"
+	local RepoNamePattern="${RepoNameHint%%/*}"
 	local -a RepoMatches
 	local RepoName
 	for RepoName in "${Repositories[@]}" ; do
-		[[ "$RepoName" =~ $RepoNameHint ]] || continue
+		[[ "$RepoName" =~ $RepoNamePattern ]] || continue
+		if [[ "$RepoName" == "$RepoNamePattern" ]]; then
+			# jackpot! perfect match, forget anything else
+			RepoMatches=( "$RepoName" )
+			break
+		fi
 		RepoMatches=( "${RepoMatches[@]}" "$RepoName" )
 	done
 	
@@ -142,13 +155,13 @@ function FindRepository() {
 		ERROR "${NMatches} matching repositories found: ${RepoMatches[@]}"
 		return 1
 	elif [[ $NMatches == 0 ]] && isFlagUnset NoError ; then
-		ERROR "No repository matching: '${RepoNameHint}'"
+		ERROR "No repository matching: '${RepoNamePattern}'"
 		return 1
-	else
-		echo "${RepoMatches[0]}"
 	fi
 	
-#	FATAL 1 "Repository by name not implemented yet"
+	local SubDir="${RepoNameHint#${RepoNamePattern}}"
+	echo "${RepoMatches[0]}${SubDir}"
+	
 	return 0
 } # FindRepository()
 
