@@ -32,11 +32,13 @@
 #   --ifhasbranch now looks also to remote branches
 # 20161223 (petrillo@fnal.gov) [v2.5]
 #   update for bash 4.4.5 (changed `declare -p` output on arrays)
+# 20170215 (petrillo@fnal.gov) [v2.6]
+#   support for branch matching via regular expressions
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
 BASESCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-BASESCRIPTVERSION="2.5"
+BASESCRIPTVERSION="2.6"
 
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
@@ -120,15 +122,19 @@ function help_baseoptions() {
 	ask for '--help=developtions'.
 	
 	Repository selection options:
-	--ifcurrentbranch=BRANCHNAME
+	--ifcurrentbranch=BRANCHNAME , --ifcurrentbranch=~BRANCHNAMEREGEX
 	    acts only on repositories whose current branch is BRANCHNAME; it can be
 	    specified more than once, in which case the operation will be performed
-	    if the current branch is any one of the chosen branches
-	--ifhasbranch=BRANCHNAME , --ifhaslocalbranch=BRANCHNAME
+	    if the current branch is any one of the chosen branches; if the second
+	    form is chosen, a bash regular expression is used to match the branch
+	    name
+	--ifhasbranch=BRANCHNAME , --ifhaslocalbranch=BRANCHNAME ,
+	--ifhasbranch=~BRANCHNAMEREGEX , --ifhaslocalbranch=BRANCHNAMEREGEX
 	    similar to '--ifcurrentbranch' above, performs the action only if the
 	    repository has one of the specified branches; the first form checks all
 	    branches, including the remote ones, while the second checks only local
-	    ones
+	    ones; the other two are equivalent, but a bash regular expression is used
+	    to match the branch name instead of using exact match
 	--only=REGEX
 	    operates only on the repositories whose name matches the specified REGEX
 	--skip=REGEX
@@ -510,6 +516,53 @@ function anyInList() {
 } # anyInList()
 
 
+function matchItem() {
+  local Value="$1"
+  local Key="$2"
+  
+  if [[ "${Key:0:1}" == '~' ]]; then
+    [[ "$Value" =~ ${Key#\~} ]]
+  else
+    [[ "$Value" == "$Key" ]]
+  fi
+  
+} # matchItem()
+
+
+function matchAnyInList() {
+	# Usage:  matchAnyInList  Sep Key [Key...] Sep [List Items...]
+	# 
+	# Like anyInList, but the key may be a regular expression if introduced by
+	# a tilde.
+	# 
+	
+	DBGN 4 "${FUNCNAME[0]} ${@}"
+	
+	# build the list of keys
+	local Sep="$1"
+	shift
+	local -a Keys
+	while [[ $# -gt 0 ]] && [[ "$1" != "$Sep" ]]; do
+		Keys=( "${Keys[@]}" "$1" )
+		shift
+	done
+	shift # the first argument was a separator
+	
+	DBGN 4 "Looking in ${@} for any of keys ${Keys[@]}"
+	
+	# now to the matching double-loop
+	local Item Key
+	for Item in "$@" ; do
+		for Key in "${Keys[@]}" ; do
+			matchItem "$Item" "$Key" || continue
+			DBGN 3 "Item '${Item}' matched ('${Key}') in list"
+			return 0
+		done
+	done
+	return 1
+} # matchAnyInList()
+
+
 function MatchTag() {
 	#
 	# Prints the key of the tag matching the provided text
@@ -839,7 +892,7 @@ function isGoodRepo() {
 		[[ -z "$CurrentBranch" ]] && CurrentBranch="$(GetCurrentBranch "$Dir")"
 		DBGN 2 "Current branch of ${RepoName}: '${CurrentBranch}'"
 		
-		anyInList -- "${OnlyIfCurrentBranches[@]}" -- "$CurrentBranch" || return 1
+		matchAnyInList -- "${OnlyIfCurrentBranches[@]}" -- "$CurrentBranch" || return 1
 	fi
 	
 	if [[ "${#OnlyIfHasBranches[@]}" -gt 0 ]]; then
@@ -848,7 +901,7 @@ function isGoodRepo() {
 		isFlagSet OnlyLocalBranches || AllBranches=( "${AllBranches[@]}" $(GetRemoteBranches "$Dir") )
 		DBGN 2 "${#AllBranches[@]} branches of ${RepoName}: ${AllBranches[@]}"
 		
-		anyInList -- "${OnlyIfHasBranches[@]}" -- "${AllBranches[@]}" || return 1
+		matchAnyInList -- "${OnlyIfHasBranches[@]}" -- "${AllBranches[@]}" || return 1
 	fi
 	
 	if [[ "${#OnlyRepos[@]}" -gt 0 ]]; then
