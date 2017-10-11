@@ -8,11 +8,18 @@
 # [source] setup mode version qualifiers experiment
 # 
 # Mode can be:
-# - 'base': very basic setup: UPS, MRB, git
+# - 'base': very basic setup: UPS, MRB
 # - 'localproducts': setup of the UPS repository containing the local products
 # - 'localproductssetup': setup of the local products
 # - 'larsoft': setup of larsoft and the experiment-specific packages
 # - 'build': setup the MRB building environment
+#
+# Version: 1.0
+#
+# Changes:
+# 20171011 [v1.0]
+#   introduced version number;
+#   removed git setup (it has been implied by mrb in a while...)
 #
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
@@ -246,11 +253,6 @@ function DoPlainSetup() {
 				
 				# set up UPS again, in case some newer version has become available
 				setup ups || let ++nErrors
-				
-				# prefer git[flow] shipped with UPS, but accept the system one as backup
-				setup git && setup gitflow
-				which git >& /dev//null || let ++nErrors
-				which git-flow >& /dev//null || let ++nErrors
 				
 				# set up MRB (current version)
 				setup mrb || let ++nErrors
