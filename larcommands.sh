@@ -72,6 +72,7 @@ declare -ar LARSOFTCOREPACKAGES=(
 	'lareventdisplay'
 	'larana'
 	'larexamples'
+	'larwirecell'
 	'larsoft'
 ) # LARSOFTCOREPACKAGES[]
 
@@ -141,7 +142,7 @@ function help_baseoptions() {
 	    skips the repositories whose name matches the specified REGEX
 	
 	Other options:
-	--source=SOURCEDIR [from MRB_SOURCES; now: '${mrb_SOURCES}']
+	--source=SOURCEDIR [from MRB_SOURCE; now: '${MRB_SOURCE}']
 	    use SOURCEDIR as base source directory
 	--compact[=MODE]
 	    do not write the git command; out the output of the command according to

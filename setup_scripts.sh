@@ -23,7 +23,11 @@ fi
 ###
 if ! type -t greadlink > /dev/null ; then
 	# aliases are not expanded in non-interactive shells, so let's use a function
-	function greadlink() { readlink "$@" ; }
+	if type -t realpath > /dev/null ; then
+		function greadlink() { realpath "$@" ; }
+	else
+		function greadlink() { readlink "$@" ; }
+	fi
 	export -f greadlink 
 fi
 

@@ -1,4 +1,4 @@
-    #!/usr/bin/env bash
+#!/usr/bin/env bash
 #
 # Brief:  Utility library for LArSoft scripts.
 # Author: Gianluca Petrillo (petrillo@fnal.gov)
@@ -234,13 +234,13 @@ function STDERR() {
 
 function STDERRCOLOR() {
   #
-  # Usage:  STDERR string [string ...]
+  # Usage:  STDERRCOLOR ColorName string [string ...]
   # 
-  # Prints a string on standard error.
+  # Prints a string on standard error, using the specified color.
   #
   local ColorName="$1"
   shift
-  echo -e "$(ApplyMessageColor '$ColorName' "$@")" >&2
+  echo -e "$(ApplyMessageColor "$ColorName" "$@")" >&2
 } # STDERRCOLOR()
 
 function INFO() {
@@ -327,6 +327,12 @@ function SetColors() {
     InfoColor=
     ResetColor=
   fi
+  export ErrorColor
+  export FatalColor
+  export WarnColor
+  export DebugColor
+  export InfoColor
+  export ResetColor
 } # SetColors()
 
 
