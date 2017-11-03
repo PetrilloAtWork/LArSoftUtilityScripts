@@ -67,12 +67,20 @@
 #     removed '-V' alias for '--version' (conflicted with valgrind short option)
 # 1.28 (petrillo@fnal.gov)
 #     added --samplingperiod option for iprofiler
+# 1.29 (petrillo@fnal.gov)
+#     added --core option
+# 1.30 (petrillo@fnal.gov)
+#     memcheck now supports multiple options from command line;
+#     XML output disabled since it consistently turns into a pain;
+#     added consistency check on profiling options
+# 1.31 (petrillo@fnal.gov)
+#     igprof set to track only 'lar' processes
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.27"
+SCRIPTVERSION="1.31"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -106,6 +114,9 @@ DATETAG="$(date '+%Y%m%d')"
 : ${DefaultProfileSamplingPeriod:="10ms"}
 
 declare -i NPostProcessWriters=0
+
+# no limits to our core...
+: ${DefaultCoreSize:="unlimited"}
 
 #
 # Standard packages which will be always looked for when printing the environment
@@ -194,6 +205,12 @@ function help() {
 	    do not abuse it: it makes harder to rerun jobs!
 	
 	 (profiling options)
+	--core[=LIMIT]
+	    instruct the operating system to dump core memory on abnormal termination;
+	    the optional limit sets the maximum size of the core file, in kilobyte.
+	    If the limit is not specified, it defaults to ${DefaultCoreSize}.
+	    Note that once the limit is set, it's not possible to increase it.
+	    Maximum value on this shell is ${MaximumCoreSize:-not enforced yet}.
 	--prepend=Executable
 	    prepends the specified executable to the lar command
 	--prependopt=OptionString
@@ -232,6 +249,10 @@ function help() {
 	--massif[=ProfileOptionString]
 	    uses valgrind's massif tool for memory allocation profiling;
 	    equivalent to --valgrind='--tool=massif'
+	--igprof[=ProfileOptionString]
+	    uses igprof performance profiler
+	--igprof_mem[=ProfileOptionString]
+	    uses igprof memory profiler
 	--iprofiler[=ProfileOptionString]
 	    equivalent to --prepend=iprofiler or --profile=iprofiler: uses Apple
 	    iprofiler running "timeprofiler" tool; the optional ProfileOptionString
@@ -451,6 +472,17 @@ function FindNextLogFile() {
 
 function LowerCase() { local VarName="$1" ; tr '[:upper:]' '[:lower:]' <<< "${!VarName}" ; }
 
+
+function SetCoreSize() {
+  
+  local -i NewSize="$1"
+  
+  ulimit -c "$NewSize" >& /dev/null
+  LASTFATAL "Can't increase the core size from ${MaximumCoreSize} to ${NewSize} \"blocks\"."
+  
+} # SetCoreSize()
+
+
 function PathList() {
 	# Prints the paths in the specified arguments, one per line
 	# (the variable is a colon-separated list of paths)
@@ -596,6 +628,16 @@ function CompressFiles() {
 } # CompressFiles()
 
 
+function SetProfiler() {
+	local NewProfiler="$1"
+	if [[ -z "$Profiler" ]]; then
+		Profiler="$NewProfiler"
+	else
+		[[ "$Profiler" == "$NewProfiler" ]] || FATAL 1 "Different profilers specified: '${Profiler}' first, then '${NewProfiler}'."
+	fi
+} # SetProfiler()
+
+
 function SetupProfiler() {
 	local Profiler="$1"
 	
@@ -649,10 +691,13 @@ function SetupProfiler() {
 					
 					PrependExecutableParameters=( "${ProfilerToolParams[@]}"
 						"--tool=${ToolOption}"
-						"--xml=yes" "--xml-file=${MachineOutputFile}" # generate XML output and write it file
+					# giving up XML right now, since it is a pain to parse and no good tools exist
+					# valgrind (at least up to 3.12) produces XML or plain text, not both
+					#	"--xml=yes" "--xml-file=${MachineOutputFile}" # generate XML output and write it file
 						"--log-file=${LogOutputFile}" # send the plain text output to a second file
 						'--child-silent-after-fork=yes' # do not trace child (fork()ed) processes
 						'--track-origins=yes'
+						'--num-callers=50' # stack trace depth (50 should be enough for lar jobs)
 						'-q' # reduce the plain text output
 						'--leak-check=full'
 						)
@@ -694,8 +739,8 @@ function SetupProfiler() {
 			
 			: ${ProfilerTool:='performance'}
 			case $(LowerCase ProfilerTool) in
-				( 'performance' | 'memory' )
-					ToolOption="-${ProfilerTool:0:1}p"
+				( 'performance' | 'memory' | 'energy' | 'empty-memory' )
+					ToolOption="--${ProfilerTool}-profiler"
 					
 					# these are the files which will be created...
 					MachineOutputFile="${JobName}-${ProfilerTool}.gz"
@@ -703,7 +748,8 @@ function SetupProfiler() {
 					
 					PrependExecutableParameters=( "${ProfilerToolParams[@]}"
 						"$ToolOption"
-						"-z" "--output" "$MachineOutputFile" # profiling output file
+						"--target" "lar" # profile only processes that contain "lar" in their name
+						"--compress" "--output" "$MachineOutputFile" # profiling output file
 						"--debug" # a bit more output
 						)
 					AddPostProcessWriter 'IgProfReport' "$ProfilerTool" "$MachineOutputFile" "$ReportFile"
@@ -1129,6 +1175,8 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--background' | '--bg' )    NOBG=0    ;;
 			( '--inline' | '--nosandbox' ) SANDBOX=0 ;;
 			( '--sandbox' )                SANDBOX=1 ;;
+			( '--core' )                   CoreSize="$DefaultCoreSize" ;;
+			( '--core='* )                 CoreSize="${Param#--*=}" ;;
 			( '--follow' | '-f' )          FollowLog=1 ;;
 			( '--nologdump' )              NoLogDump=1 ;;
 			( '--noconfigdump' )           DumpConfigMode="No" ;;
@@ -1170,7 +1218,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 				done
 				;;
 			( '--profile='* )
-				Profiler="${Param#--*=}"
+				SetProfiler "${Param#--*=}"
 				;;
 			( '--env:'*=* )
 				CommandEnvironment=( "${CommandEnvironment[@]}" "${Param#--env:}" )
@@ -1181,43 +1229,43 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			#
 			# FAST profiler
 			( '--fast='* )
-				Profiler="fast"
+				SetProfiler "fast"
 				ProfilerToolParams=( "${Param#--*=}" )
 				;;
 			( '--fast' | '-F' )
-				Profiler="fast"
+				SetProfiler "fast"
 				;;
 			#
 			# Allinea profiler (http://www.allinea.com/products/map)
 			( '--allinea='* )
-				Profiler="allinea"
+				SetProfiler "allinea"
 				ProfilerToolParams=( "${Param#--*=}" )
 				;;
 			( '--allinea' | '-A' )
-				Profiler="allinea"
+				SetProfiler "allinea"
 				;;
 			#
 			# Open|SpeedShop profiler
 			( '--oss='* )
-				Profiler="Open|SpeedShop"
+				SetProfiler "Open|SpeedShop"
 				ProfilerTool="oss${Param#--*=}"
 				;;
 			( '--oss' )
-				Profiler="Open|SpeedShop"
+				SetProfiler "Open|SpeedShop"
 				;;
 			#
 			# GPerfTools
 			( '--gpt' | '--gperf' | '--gperftool' | '--gperftools' )
-				Profiler="GPerfTools"
+				SetProfiler "GPerfTools"
 				;;
 			#
 			# valgrind
 			( '--valgrind='* )
-				Profiler="valgrind"
+				SetProfiler "valgrind"
 				ProfilerToolParams=( "${Param#--*=}" )
 				;;
 			( '--valgrind' | '-V' )
-				Profiler="valgrind"
+				SetProfiler "valgrind"
 				;;
 			(    '--massif'   | '--massif='*         \
 				| '--dhat'     | '--dhat='*           \
@@ -1225,25 +1273,25 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 				| '--callgrind' | '--callgrind='*     \
 				| '--cachegrind' | '--cachegrind='*   \
 			)
-				Profiler="valgrind"
+				SetProfiler "valgrind"
 				ProfilerTool="${Param%%=*}"
 				ProfilerTool="${ProfilerTool#--}"
-				[[ "$Param" =~ = ]] && ProfilerToolParams=( "${Param#--${ProfilerTool}=}" )
+				[[ "$Param" =~ = ]] && ProfilerToolParams+=( "${Param#--${ProfilerTool}=}" )
 				;;
 			
 			# 
 			# Ignominous Profiler
 			( '--igprof' | '-I' )
-				Profiler="igprof"
+				SetProfiler "igprof"
 				ProfilerTool="performance"
 				;;
 			( '--igprof='* )
-				Profiler="igprof"
+				SetProfiler "igprof"
 				ProfilerTool="performance"
 				ProfilerToolParams=( "${Param#--*=}" )
 				;;
 			( '--igprof_mem' | '--igprof_mem='* )
-				Profiler="igprof"
+				SetProfiler "igprof"
 				ProfilerTool="memory"
 				ProfilerToolParams=( "${Param#--*=}" )
 				[[ "$Param" =~ = ]] && ProfilerToolParams=( "${Param#--*=}" )
@@ -1252,11 +1300,11 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			#
 			# Apple iprofiler
 			( '--iprofiler' )
-				Profiler="iprofiler"
+				SetProfiler "iprofiler"
 				ProfilerTool="timeprofiler"
 				;;
 			( '--iprofiler='* )
-				Profiler="iprofiler"
+				SetProfiler "iprofiler"
 				
 				: ${ProfilerTool:="timeprofiler"}
 				ProfilerToolParams=( "${Param#--*=}" )
@@ -1287,6 +1335,12 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	fi
 done
 
+# maximum (current) core size;
+# note that 0 /might/ mean it's impossible to change it
+declare MaximumCoreSize=$(ulimit -c)
+[[ $MaximumCoreSize == 0 ]] && MaximumCoreSize=''
+
+
 declare -i ExitCode NeedHelp=1
 if isFlagSet OnlyPrintEnvironment ; then
 	NeedHelp=0
@@ -1308,6 +1362,10 @@ if isFlagSet DoHelp || ( isFlagSet NeedHelp && [[ -z "$ConfigFile" ]] ); then
 fi
 
 [[ -n "$ExitCode" ]] && exit $ExitCode
+
+
+[[ -n "$CoreSize" ]] && SetCoreSize "$CoreSize"
+
 
 # steal lar parameters and identify path parameters
 declare -ai PathParams
@@ -1335,7 +1393,6 @@ for (( iParam = 0; iParam < $nParams ; ++iParam )); do
 			;;
 	esac
 done
-
 
 declare ConfigName="$(basename "${ConfigFile%.fcl}")"
 : ${JobBaseName:="$ConfigName"}
