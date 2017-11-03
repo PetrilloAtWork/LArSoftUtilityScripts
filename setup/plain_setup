@@ -213,7 +213,7 @@ function DoPlainSetup() {
 						fi
 						setup gitflow || let ++nErrors
 						setup mrb || let ++nErrors
-						export MRB_PROJECT=larsoft
+						[[ -z "$MRB_PROJECT" ]] && export MRB_PROJECT=larsoft
 					else
 						echo "    base setup script '${setup_base_script}' not available -- using local setup."
 						setup_base_script=":golocal:"
@@ -256,7 +256,7 @@ function DoPlainSetup() {
 				
 				# set up MRB (current version)
 				setup mrb || let ++nErrors
-				export MRB_PROJECT=larsoft
+				[[ -z "$MRB_PROJECT" ]] && export MRB_PROJECT=larsoft
 			else
 				# set up UPS again, in case some newer version has become available
 				setup ups || let ++nErrors
@@ -285,7 +285,7 @@ function DoPlainSetup() {
 						[[ -x "$setup_script" ]] && break 2
 					done
 					# restore the value for error messages
-					setup_script="localProducts_larsoft_${setup_spec}/setup"
+					setup_script="localProducts_${MRB_PROJECT:-"larsoft"}_${setup_spec}/setup"
 					break
 				done # fake loop
 			fi
@@ -348,7 +348,7 @@ function DoPlainSetup() {
 					codenames=( "${codenames[@]}" )
 					;;
 				( 'AllExperiments' )
-					codenames=( "${codenames[@]}" 'dunetpc' 'uboonecode' 'sbndcode' 'lariatsoft' 'argoneutcode' )
+					codenames=( "${codenames[@]}" 'dunetpc' 'uboonecode' 'sbndcode' 'lariatsoft' 'argoneutcode' 'icaruscode' )
 					;;
 				( * )
 					codenames=( "${codenames[@]}" )

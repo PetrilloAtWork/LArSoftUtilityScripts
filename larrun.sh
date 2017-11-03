@@ -130,7 +130,7 @@ StandardPackages=(
 )
 declare -a OptionalPackages
 OptionalPackages=(
-	uboonecode dunetpc sbndcode t962code argoneutcode lariatcode
+	uboonecode dunetpc sbndcode t962code argoneutcode lariatcode icaruscode
 )
 
 function help() {

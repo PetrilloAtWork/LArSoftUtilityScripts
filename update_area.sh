@@ -10,6 +10,8 @@
 #     added the "--fake" option
 # 20160701 (petrillo@fnal.gov) [v1.2]
 #     unsetting the old MRB_INSTALL path from PRODUCTS
+# 20170317 (petrillo@fnal.gov) [v1.3]
+#     updated the list of packages not to learn current version from
 # 
 
 
@@ -21,9 +23,9 @@ fi
 ( # subshell, protect from sourcing
 
 SCRIPTNAME="$(basename -- "$0")"
-SCRIPTVERSION="1.2"
+SCRIPTVERSION="1.3"
 
-declare -ar SkipRepositories=( 'ubutil' 'lbneutil' )
+declare -ar SkipRepositories=( 'ubutil' 'lbneutil' 'sbndutil' 'larcoreobj' 'lardataobj' 'larsoftobj' )
 
 function help() {
 	cat <<-EOH
@@ -348,6 +350,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	fi
 done
 
+unset ExitCode
 declare -i ExitCode
 
 if isFlagSet DoVersion ; then
@@ -358,8 +361,7 @@ fi
 if isFlagSet DoHelp ; then
 	[[ "${BASH_SOURCE[0]}" == "$0" ]] && help
 	# set the exit code (0 for help option, 1 for missing parameters)
-	isFlagSet DoHelp
-	{ [[ -z "$ExitCode" ]] || [[ "$ExitCode" == 0 ]] ; } && ExitCode="$?"
+	{ [[ -z "$ExitCode" ]] || [[ "$ExitCode" == 0 ]] ; } && { isFlagSet DoHelp ; ExitCode="$?" ; }
 fi
 
 [[ -n "$ExitCode" ]] && exit $ExitCode
@@ -409,7 +411,9 @@ if [[ -n "$local_updatearea_SourceMe" ]]; then
 	cat <<-EOS > "$local_updatearea_SourceMe"
 	source '${LocalProductsPath}/setup'
 	[[ \$? != 0 ]] && return \$?
-	export PRODUCTS="\$(sed -E -e "s@:${MRB_INSTALL}:@:@g" -e "s@(:|^)${MRB_INSTALL}(:|$)@@g" <<< "\${PRODUCTS}")"
+	if [[ "\$MRB_INSTALL" != "${MRB_INSTALL}" ]]; then
+		export PRODUCTS="\$(sed -E -e "s@:${MRB_INSTALL}:@:@g" -e "s@(:|^)${MRB_INSTALL}(:|$)@@g" <<< "\${PRODUCTS}")"
+	fi
 	echo "PRODUCTS set to:"
 	tr ':' $'\n' <<< "\$PRODUCTS"
 	EOS

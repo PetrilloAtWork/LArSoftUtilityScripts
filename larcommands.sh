@@ -34,11 +34,13 @@
 #   update for bash 4.4.5 (changed `declare -p` output on arrays)
 # 20170215 (petrillo@fnal.gov) [v2.6]
 #   support for branch matching via regular expressions
+# 20170222 (petrillo@fnal.gov) [v2.7]
+#   updated the list of LArSoft core repositories
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
 BASESCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-BASESCRIPTVERSION="2.6"
+BASESCRIPTVERSION="2.7"
 
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
@@ -63,12 +65,17 @@ TagSources['NArguments']='TAGVALUE_NArguments'
 
 
 declare -ar LARSOFTCOREPACKAGES=(
+	'larcoreobj'
+	'lardataobj'
+	'larsoftobj'
 	'larcore'
 	'lardata'
 	'larevt'
 	'larsim'
 	'larreco'
+	'larpandoracontent'
 	'larpandora'
+	'larwirecell'
 	'lareventdisplay'
 	'larana'
 	'larexamples'

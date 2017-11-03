@@ -564,6 +564,10 @@ case "$(LowerCaseVariable Experiment)" in
 		Experiment="SBND"
 		LeadingPackage="sbndcode"
 		;;
+	( 'icarus' )
+		Experiment="ICARUS"
+		LeadingPackage="icaruscode"
+		;;
 	( 'larsoft' )
 		Experiment="LArSoft"
 		LeadingPackage="larsoft"
