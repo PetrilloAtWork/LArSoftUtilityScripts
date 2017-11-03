@@ -180,7 +180,7 @@ function DoPlainSetup() {
 					;;
 				( 'SBND' )
 					echo " * SBND specific setup"
-					setup_base_script="/grid/fermiapp/products/sbnd/setup_sbnd.sh"
+					setup_base_script="/cvmfs/sbnd.opensciencegrid.org/products/sbnd/setup_sbnd.sh"
 					if [[ -r "$setup_base_script" ]]; then
 						source "$setup_base_script" || let ++nErrors
 					else
