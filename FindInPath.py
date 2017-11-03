@@ -10,11 +10,13 @@
 #   first version (from a bash version)
 # 20160602 (petrillo@fnal.gov) [v1.1]
 #   add a --full option and make partial match the default
-# 20160718 (petrillo2fnal.gov) [v1.2]
+# 20160718 (petrillo@fnal.gov) [v1.2]
 #   bug fix: default output should print directory, not full path
+# 20170517 (petrillo@fnal.gov) [v1.3]
+#   added --fw option
 #
 
-__version__ = "1.2"
+__version__ = "1.3"
 __doc__ = """
 Looks for files in the search directories specified in the given variables.
 """
@@ -178,6 +180,10 @@ if __name__ == "__main__":
 	InputOptions.add_argument('--fcl', '--fhicl', '-F', dest="VarNames",
 	  action="append_const", const='FHICL_FILE_PATH',
 	  help="uses FHICL_FILE_PATH as variable (equivalent to '--varname=FHICL_FILE_PATH')"
+	  )
+	InputOptions.add_argument('--fw', dest="VarNames",
+	  action="append_const", const='FW_SEARCH_PATH',
+	  help="uses FW_SEARCH_PATH as variable (equivalent to '--varname=FW_SEARCH_PATH')"
 	  )
 	InputOptions.add_argument('--suffix', dest="Suffixes", action="append",
 	  help="only prints entries with this suffix (can be specified multiple times)"
