@@ -68,10 +68,10 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
       ( '--debug='* ) DEBUG="${Param#--*=}" ;;
       ( '--debug' | '-d' ) DEBUG=1 ;;
       
-      ( '--tosrc' | '-s' ) Dest="MRB_SOURCE" ;;
-      ( '--tobuild' | '-b' ) Dest="MRB_BUILDDIR" ;;
+      ( '--tosrc' | '-s' ) Dest="SOURCE" ;;
+      ( '--tobuild' | '-b' ) Dest="BUILDDIR" ;;
       ( '--toinstall' | '--tolp' | '--tolocal' | '-i' | '-l' )
-        Dest="MRB_INSTALL" ;;
+        Dest="INSTALL" ;;
       
       ( '--quiet' | '-q' ) BeQuiet=1 ;;
       
@@ -108,7 +108,7 @@ else
   Dir="${Arguments[0]}"
 fi
 
-[[ -d "$MRB_TOP" ]] || FATAL 1 "No MRB working area is set up."
+WorkingAreaType >& /dev/null || FATAL 1 "No working area is set up."
 
 ###
 ### autodetect where we are
@@ -117,9 +117,9 @@ declare SubDir='' BaseVarName=''
 if [[ -z "$Src" ]]; then
   LocationName=$(DetectMRBLocation "$Dir")
   if [[ $? == 0 ]]; then
-    Src="MRB_${LocationName}"
-    SubDir="$(SubpathTo "$Dir" "${!Src}")"
-    DBGN 2 "Detected the current location to be under '\${${Src}}${SubDir:+/${SubDir}}'"
+    Src="$LocationName"
+    SubDir="$(SubpathTo "$Dir" "$(getWorkingAreaDir "$Src")")"
+    DBGN 2 "Detected the current location to be under '<${Src}>${SubDir:+/${SubDir}}'"
   fi
 fi
 
@@ -128,30 +128,31 @@ fi
 ###
 if [[ -z "$Dest" ]]; then
   case "$Src" in
-    ( "MRB_SOURCE" )   Dest="MRB_BUILDDIR" ;;
-    ( "MRB_INSTALL" )  Dest="MRB_SOURCE" ;;
-    ( "MRB_BUILDDIR" ) Dest="MRB_SOURCE" ;;
-    ( "MRB_TOP" )      Dest="MRB_SOURCE" ;;
+    ( "SOURCE" )   Dest="BUILDDIR" ;;
+    ( "INSTALL" )  Dest="SOURCE" ;;
+    ( "BUILDDIR" ) Dest="SOURCE" ;;
+    ( "TOP" )      Dest="SOURCE" ;;
     ( "" )
       isFlagSet BeQuiet || STDERR "I have no idea where I am: heading to source directory."
-      Dest="MRB_SOURCE"
+      Dest="SOURCE"
       ;;
   esac
   DBGN 1 "Decided to go to ${Dest}"
 fi
 
 declare TargetDir=''
-if [[ "$Dest" == "MRB_INSTALL" ]]; then
+if [[ "$Dest" == "INSTALL" ]]; then
   # local products directory has a simpler structure
   
-  if [[ "$BaseVarName" != 'MRB_TOP' ]] && [[ -n "$SubDir" ]]; then
+  if [[ "$BaseVarName" != 'TOP' ]] && [[ -n "$SubDir" ]]; then
     DBGN 2 "Target install directory set to: '${TargetDir}'"
     TargetDir="/${SubDir%%/*}"
       
     [[ -n "$MRB_PROJECT_VERSION" ]] && TargetDir+="/${MRB_PROJECT_VERSION}"
     DBGN 2 "Target install directory expanded to: '${TargetDir}'"
   
-    if [[ ! -d "${MRB_INSTALL}${TargetDir}" ]]; then
+    FullTargetDir="$(MRBInstallDir)"
+    if [[ ! -d "$FullTargetDir" ]]; then
       TargetDir="$(dirname "$TargetDir")"
       DBGN 2 "Target install directory simplified to: '${TargetDir}'"
     fi
@@ -168,7 +169,7 @@ fi
 
 [[ -z "$Dest" ]] && FATAL 1 "BUG: I am lost, I don't know where to go!"
 
-DestDir="${!Dest}"
+DestDir="$(getWorkingAreaDir "$Dest")"
 [[ -z "$DestDir" ]] && FATAL 1 "Destination '${Dest}' is not defined!"
 
 DestDir+="${TargetDir}"

@@ -916,6 +916,28 @@ function DetectNCPUs() {
   return 1
 } # DetectNCPUs()
 
+function WorkingAreaType() {
+	[[ -n "$MRB_TOP" ]]      && echo 'MRB'      && return 0
+	[[ -n "$WORKAREA_TOP" ]] && echo 'WORKAREA' && return 0
+	return 1
+} # WorkingAreaType()
+
+function getWorkingAreaDir() {
+	local Keyword="$1"
+	local AreaType
+	AreaType="$(WorkingAreaType)"
+	local res=$?
+	[[ $res != 0 ]] && return $res
+	local VarName="${AreaType}${Keyword:+_${Keyword}}"
+	echo "${!VarName}"
+} # getWorkingAreaDir()
+
+
+function MRBTopDir() { getWorkingAreaDir 'TOP' ; }
+function MRBBuildDir() { getWorkingAreaDir 'BUILDDIR' ; }
+function MRBSourceDir() { getWorkingAreaDir 'SOURCE' ; }
+function MRBInstallDir() { getWorkingAreaDir 'INSTALL' ; }
+
 
 function isMakeDirectory() {
   #
@@ -950,7 +972,7 @@ function isNinjaDirectory() {
   isMRBBuildArea "$Dir" || return 1
   
   # the top build directory has a build.ninja file
-  [[ -r "${MRB_BUILDDIR}/build.ninja" ]] || return 1
+  [[ -r "$(MRBBuildDir)/build.ninja" ]] || return 1
   
   # that's it, we are in business
   return 0
@@ -1026,8 +1048,9 @@ function isMRBSourceArea() {
   #
   
   local Dir="${1:-.}"
-  if [[ -n "$MRB_SOURCE" ]]; then
-    isDirUnder "$Dir" "$MRB_SOURCE"
+  local SourceDir="$(MRBSourceDir)"
+  if [[ -n "$SourceDir" ]]; then
+    isDirUnder "$Dir" "$SourceDir"
   else
     DBGN 2 "Attempt to determine if '${Dir}' is a MRB source area, without MRB"
     Dir="$(MakeAbsolutePath "$Dir")"
@@ -1051,8 +1074,9 @@ function isMRBBuildArea() {
   #
   
   local Dir="$1"
-  if [[ -n "$MRB_BUILDDIR" ]]; then
-    isDirUnder "$Dir" "$MRB_BUILDDIR"
+  local BuildDir="$(MRBBuildDir)"
+  if [[ -n "$BuildDir" ]]; then
+    isDirUnder "$Dir" "$BuildDir"
   else
     DBGN 2 "Attempt to determine if '${Dir}' is a MRB build area, without MRB"
     Dir="$(MakeAbsolutePath "$Dir")"
@@ -1076,8 +1100,9 @@ function isMRBInstallArea() {
   #
   
   local Dir="$1"
-  if [[ -n "$MRB_INSTALL" ]]; then
-    isDirUnder "$Dir" "MRB_INSTALL"
+  local InstallDir="$(MRBInstallDir)"
+  if [[ -n "$InstallDir" ]]; then
+    isDirUnder "$Dir" "$InstallDir"
     return
   else
     DBGN 2 "Attempt to determine if '${Dir}' is a MRB install area, without MRB"
@@ -1102,8 +1127,9 @@ function isMRBWorkingArea() {
   #
   
   local Dir="$1"
-  if [[ -n "$MRB_TOP" ]]; then
-    isDirUnder "$Dir" "$MRB_TOP"
+  local TopDir="$(MRBTopDir)"
+  if [[ -n "$TopDir" ]]; then
+    isDirUnder "$Dir" "$TopDir"
   else
     DBGN 2 "Attempt to determine if '${Dir}' is a MRB area, without MRB"
     
