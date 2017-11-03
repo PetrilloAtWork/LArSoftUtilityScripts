@@ -5,7 +5,7 @@
 
 SCRIPTNAME="$(basename "$0")"
 SCRIPTDIR="$(dirname "$0")"
-SCRIPTVERSION="1.1"
+SCRIPTVERSION="1.2"
 
 [[ "${#DEFAULTPACKAGES[@]}" == 0 ]] && DEFAULTPACKAGES=( 'cetbuildtools' 'art' )
 
@@ -54,6 +54,8 @@ function help() {
 	    do not show the files, only print their path
 	--listall
 	    print all the possible choices of macro files
+	--find=MACRONAME
+	    looks for all the files with the specified macro definition
 	--package=PACKAGE [${DEFAULTPACKAGES[@]}]
 	    add one UPS package at the list of package to be used
 	--pager=PAGER [${PAGER}]
@@ -81,6 +83,12 @@ function FindMatches() {
 } # FindMatches()
 
 
+function FindAllModules() {
+	local -a Dirs=( "$@" )
+	FindMatches '*' "${Dirs[@]}"
+} # FindAllModules()
+
+
 function GetPackageDir() {
 	local Package="$1"
 	local PackageDirVar="${Package^^}_DIR"
@@ -95,13 +103,44 @@ function FindModuleDir() {
 	local PackageDir="${2:-$(GetPackageDir "$PackageName")}"
 	
 	local ModuleDir DirName
-	for DirName in "Modules" ; do
+	for DirName in 'Modules' ; do
 		ModuleDir="${PackageDir}/${DirName}"
 		[[ -d "$ModuleDir" ]] && echo "$ModuleDir" && return 0
 	done
 	return 2
 } # FindModuleDir()
 
+
+function ExtractMacroDefinitions() {
+	local MacroFile="$1"
+	
+	# this "simple" pattern fails with multiple macro definitions per line
+	# - select only the lines with 'macro' as a single word in it (is it commented out? we don't notice it)
+	# - extract the first word from the brackets immediately after the first 'macro' word
+	grep -E '\b(macro|function)[[:blank:]]*\(' "$MacroFile" | sed -E -e 's/.*(macro|function)[[:blank:]]*\([[:blank:]]*([^[:blank:]\)]*)[[:blank:]]*[^\)]*\).*$/\2/'
+	
+} # ExtractMacroDefinitions()
+
+
+function hasAnyMacroDefinition() {
+	# Usage:  hasAnyMacroDefinition MacroFile MacroName [MacroName ...]
+	
+	local MacroFile="$1"
+	shift
+	local -a MacroNames=( "$@" )
+	
+	DBGN 3 "Checking file '${MacroFile}' for macro definitions matching: ${MacroNames}"
+	
+	local -a GrepArgs
+	local MacroName
+	for MacroName in "${MacroNames[@]}" ; do
+		GrepArgs+=( '-e' "^${MacroName}\$" )
+	done
+	
+	DBGN 4 grep -q -E "${GrepArgs[@]}" "$MacroFile"
+	ExtractMacroDefinitions "$MacroFile" | grep -q -E "${GrepArgs[@]}"
+	return ${PIPESTATUS[-1]}
+} # hasAnyMacroDefinition()
 
 
 ###############################################################################
@@ -116,7 +155,8 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
 	if [[ "${Param:0:1}" == '-' ]] && isFlagUnset NoMoreOptions ; then
 		case "$Param" in
-			( '--package='* )          Packages=( "${Packages[@]}" "${Param#--*=}" ) ;;
+			( '--package='* )          Packages+=( "${Param#--*=}" ) ;;
+			( '--find='* )             Macros+=( "${Param#--*=}" ) ;;
 			( '--pager='* )            PAGER="${Param#--*=}" ;;
 			( '--debug' )              DEBUG=1 ;;
 			( '--debug='* )            DEBUG="${Param#--*=}" ;;
@@ -144,11 +184,12 @@ fi
 
 [[ "${#Packages[@]}" == 0 ]] && Packages=( "${DEFAULTPACKAGES[@]}" )
 
-[[ ${#Patterns[@]} == 0 ]] && ListAll=1
+# if no filtering and no pattern is asked, we just list the modules.
+[[ "${#Macros[@]}" == 0 ]] && [[ ${#Patterns[@]} == 0 ]] && ListAll=1
 
 # set up check
 declare -a AvailablePackages
-declare -a ModulesFound
+declare -a AllModules
 declare -i nErrors=0
 for PackageName in "${Packages[@]}" ; do
 	declare PackageDir="$(GetPackageDir "$PackageName")"
@@ -178,25 +219,50 @@ for PackageName in "${Packages[@]}" ; do
 		continue
 	fi
 	
-	# process all the patterns one by one
-	for Pattern in "${Patterns[@]}" ; do
-		DBGN 2 "  Pattern: '${Pattern}'"
-		
-		declare -a PatternMatches=()
-		
-		while read Match ; do
-			PatternMatches=( "${PatternMatches[@]}" "$Match" )
-		done < <(FindMatches "$Pattern" "$PackageModuleDir" )
-		
-		if [[ "${#PatternMatches[@]}" == 0 ]]; then
-			DBGN 1 "Pattern '${Pattern}' does not match any ${PackageName} CMake module."
-			continue
-		fi
+	# process all the file patterns one by one
+	declare -a CandidateModules=()
+	if [[ "${#Patterns[@]}" -gt 0 ]]; then
+		for Pattern in "${Patterns[@]}" ; do
+			DBGN 2 "  Pattern: '${Pattern}'"
 			
-		ModulesFound=( "${ModulesFound[@]}" "${PatternMatches[@]}" )
-		
-		isFlagUnset ListOnly && $PAGER "${PatternMatches[@]}"
-	done # for patterns
+			declare -a PatternMatches=()
+			
+			while read Match ; do
+				PatternMatches+=( "$Match" )
+			done < <(FindMatches "$Pattern" "$PackageModuleDir" )
+			
+			if [[ "${#PatternMatches[@]}" == 0 ]]; then
+				DBGN 1 "Pattern '${Pattern}' does not match any ${PackageName} CMake module."
+				continue
+			fi
+			
+			CandidateModules+=( "${PatternMatches[@]}" )
+			
+		done # for patterns
+	else
+		readarray -t CandidateModules < <(FindAllModules "$PackageModuleDir")
+	fi
+	
+	DBGN 1 "Collected ${#CandidateModules[@]} candidate modules: ${CandidateModules[@]}"
+	# filter by macro name
+	declare -a SelectedModules=()
+	if [[ "${#Macros[@]}" -gt 0 ]]; then
+		DBGN 1 "Looking for definitions of macros with pattern: ${Macros[@]}"
+		declare Module
+		for Module in "${CandidateModules[@]}" ; do
+			if hasAnyMacroDefinition "$Module" "${Macros[@]}" ; then
+				SelectedModules+=( "$Module" )
+			else
+				DBGN 3 "CMake module '${Module}' does not contain macro definition(s)"
+			fi
+		done
+		DBGN 1 "Selected ${#SelectedModules[@]} modules: ${SelectedModules[@]}"
+	else
+		SelectedModules=( "${CandidateModules[@]}" )
+	fi
+	
+	isFlagUnset ListOnly && [[ "${#SelectedModules[@]}" -gt 0 ]] && $PAGER "${SelectedModules[@]}"
+	AllModules+=( "${SelectedModules[@]}" )
 	
 done # for UPS products
 [[ "${AvailablePackages[@]}" == 0 ]] && FATAL 1 "No relevant package set up!"
@@ -204,10 +270,10 @@ done # for UPS products
 isFlagSet ListAll && exit
 
 # print all the sources we could find
-if [[ "${#ModulesFound[@]}" == 0 ]]; then
+if [[ "${#AllModules[@]}" == 0 ]]; then
 	ERROR "No items matching the specified pattern(s)!"
 else
-	for Module in "${ModulesFound[@]}" ; do
+	for Module in "${AllModules[@]}" ; do
 		echo "$Module"
 	done
 fi
