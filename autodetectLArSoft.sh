@@ -379,6 +379,23 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	fi
 done
 
+declare LArSoftVersion=""
+declare LArSoftQualifiers=""
+declare Experiment=""
+
+if [[ "${Versions[0]:0:1}" == '!' ]]; then
+	LArSoftVersion="${Versions[0]#!}"
+	Versions[0]="$LArSoftVersion"
+fi
+if [[ "${Versions[1]:0:1}" == '!' ]]; then
+	LArSoftQualifiers="${Versions[1]#!}"
+	Versions[1]="$LArSoftQualifiers"
+fi
+if [[ "${Versions[2]:0:1}" == '!' ]]; then
+	Experiment="${Versions[2]#!}"
+	Versions[2]="$Experiment"
+fi
+
 : ${DefaultLArSoftVersion:="${Versions[0]:-"default"}"}
 : ${DefaultLArSoftQualifiers:="${Versions[1]:-"default"}"}
 : ${DefaultExperiment:="${Versions[2]:-"LArSoft"}"}
@@ -392,10 +409,6 @@ if isFlagSet DoHelp ; then
 	exit $?
 fi
 
-
-declare LArSoftVersion=""
-declare LArSoftQualifiers=""
-declare Experiment=""
 
 declare SetupDir="$(dirname "$0")"
 [[ "${SetupDir:0:2}" == './' ]] && SetupDir="$(pwd)/${SetupDir:2}"
