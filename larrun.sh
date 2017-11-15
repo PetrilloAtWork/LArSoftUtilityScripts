@@ -701,7 +701,7 @@ function SetupProfiler() {
 						'-q' # reduce the plain text output
 						'--leak-check=full'
 						)
-					local ROOTSupp="${ROOT_DIR}/${ROOT_FQ}/etc/valgrind-root.supp"
+					local ROOTSupp="${ROOTSYS}/etc/valgrind-root.supp"
 					if [[ -r "$ROOTSupp" ]]; then
 						PrependExecutableParameters=( "${PrependExecutableParameters[@]}" "--suppressions=${ROOTSupp}" )
 					fi
