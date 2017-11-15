@@ -154,74 +154,41 @@ function DoPlainSetup() {
 			# must make sure it unsetups all the active packages that also exist in
 			# the newer database. This is what mrbsetenv does.
 			#
-			
+			local setup_base_script
 			case "$setup_experiment" in
 				( 'MicroBooNE' )
 					# MicroBooNE setup adds to the above a specific UPS repository
 					echo " * MicroBooNE specific setup"
-				#	setup_base_script="/grid/fermiapp/uboone/software/setup_uboone.sh"
-					setup_base_script="/grid/fermiapp/products/uboone/setup_uboone.sh"
-					if [[ -r "$setup_base_script" ]]; then
-						source "$setup_base_script" || let ++nErrors
-					else
-						echo "    base setup script '${setup_base_script}' not available -- using local setup."
-						setup_base_script=":golocal:"
-					fi
+					setup_base_script="/cvmfs/uboone.opensciencegrid.org/products/uboone/setup_uboone.sh"
 					;;
 				( 'LBNE' | 'DUNE' )
 					echo " * DUNE specific setup"
-					setup_base_script="/grid/fermiapp/products/dune/setup_dune.sh"
-					if [[ -r "$setup_base_script" ]]; then
-						source "$setup_base_script" || let ++nErrors
-					else
-						echo "    base setup script '${setup_base_script}' not available -- using local setup."
-						setup_base_script=":golocal:"
-					fi
+					setup_base_script="/cvmfs/uboone.opensciencegrid.org/products/dune/setup_dune.sh"
 					;;
 				( 'SBND' )
 					echo " * SBND specific setup"
 					setup_base_script="/cvmfs/sbnd.opensciencegrid.org/products/sbnd/setup_sbnd.sh"
-					if [[ -r "$setup_base_script" ]]; then
-						source "$setup_base_script" || let ++nErrors
-					else
-						echo "    base setup script '${setup_base_script}' not available -- using local setup."
-						setup_base_script=":golocal:"
-					fi
-				;;
+					;;
 				( 'LArIAT' )
 					echo " * ${setup_experiment} specific setup"
-					setup_base_script="${HOME}/LArSoft/software/setup_lariat.sh"
-					if [[ -r "$setup_base_script" ]]; then
-						source "$setup_base_script" || let ++nErrors
-					else
-						echo "    base setup script '${setup_base_script}' not available -- using local setup."
-						setup_base_script=":golocal:"
-					fi
+					setup_base_script="/cvmfs/lariat.opensciencegrid.org/setup_lariat.sh"
 					;;
 				( * )
 					# this is experiment-agnostic setup:
 					echo " * generic LArSoft setup (${setup_experiment})"
-					setup_base_script="/grid/fermiapp/products/larsoft/setup"
-					if [[ -r "$setup_base_script" ]]; then
-						source "$setup_base_script" || let ++nErrors
-						if ! setup git ; then
-							if which git >& /dev/null ; then
-								echo "Using git from the system"
-							else
-								let ++nErrors
-							fi
-						fi
-						setup gitflow || let ++nErrors
-						setup mrb || let ++nErrors
-						[[ -z "$MRB_PROJECT" ]] && export MRB_PROJECT=larsoft
-					else
-						echo "    base setup script '${setup_base_script}' not available -- using local setup."
-						setup_base_script=":golocal:"
-					fi
+					setup_base_script="/cvmfs/fermilab.opensciencegrid.org/products/larsoft/setup"
 					;;
 			esac
+			if [[ -n "$setup_base_script" ]] && [[ -r "$setup_base_script" ]]; then
+				source "$setup_base_script" || let ++nErrors
+				which mrb >& /dev/null || setup mrb || let ++nErrors
+				[[ -z "$MRB_PROJECT" ]] && export MRB_PROJECT=larsoft
+			else
+				echo "    base setup script '${setup_base_script}' not available -- using local setup."
+				setup_base_script=":golocal:"
+			fi
 			
-			# no UPS setup beyond this point, unless previous UPS package set up failed...
+			# no UPS product setup beyond this point, unless previous UPS package set up failed or going local...
 			
 			# ... except the fallback, because it goes lowest in the priority list
 			# set up UPS repositories used only as fallback
@@ -233,21 +200,24 @@ function DoPlainSetup() {
 				# hope "Setup UPS_local" means something in your system...
 				let ++nOutput
 				
-				function _AddCVMFSUPS() {
-					local BaseDir="$1"
-					shift
-					local ProductDir
-					for ProductDir in "$@" ; do
-						local ProductPath="${BaseDir}/${ProductDir}"
-						[[ -d "$ProductPath" ]] || continue
-						echo "Configuring CVMFS UPS repository '${ProductPath}'"
-						PRODUCTS="${PRODUCTS}:${ProductPath}"
-					done
-					export PRODUCTS
-				} # _AddCVMFSUPS()
-				
 				# adding experiment-specific repositories from CVMFS as low priority
-				_AddCVMFSUPS "/cvmfs/oasis.opensciencegrid.org" "/cvmfs/fermilab.opensciencegrid.org" "dune/products" "microboone/products"
+				local CVMFSdir
+				for CVMFSdir in /cvmfs/fermilab.opensciencegrid.org/products/common/db \
+                                  /cvmfs/fermilab.opensciencegrid.org/products/larsoft \
+                                  /cvmfs/dune.opensciencegrid.org/products/dune \
+                                  /cvmfs/lariat.opensciencegrid.org/externals \
+                                  /cvmfs/uboone.opensciencegrid.org/products \
+                                  ; do
+					[[ ! -d "$CVMFSdir" ]] && echo "WARNING: UPS repository '${CVMFSdir}' not available!" && continue
+					local SetupFile="${CVMFSdir}/setup"
+					if [[ -r "$SetupFile" ]]; then
+						echo "    - setting up UPS repository '${CVMFSdir}'..."
+						source "$SetupFile"
+					else
+						echo "    - adding UPS repository '${CVMFSdir}'..."
+						PRODUCTS+=":${CVMFSdir}"
+					fi
+				done
 				
 				Setup UPS_local  >& >(sed -e "s/^/    [${nOutput}> /")
 				
