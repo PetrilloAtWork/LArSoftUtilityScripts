@@ -109,7 +109,7 @@ function DoPlainSetup() {
 	### Learn about the working area features from the caller
 	###
 	local SCRIPTPATH="${BASH_SOURCE[0]}"
-	local scriptdir="$(dirname "$(greadlink -f "$SCRIPTPATH")")"
+	local scriptdir="$(dirname "$(grealpath "$SCRIPTPATH")")"
 	
 	local setup_version="$2"
 	local setup_qual="$3"
@@ -273,7 +273,7 @@ function DoPlainSetup() {
 			
 			echo " * local products UPS area set up"
 			if [[ -r "$setup_script" ]]; then
-				echo "   => setup: '$(greadlink -f "${setup_script}")'"
+				echo "   => setup: '$(grealpath "${setup_script}")'"
 				[[ -n "$nOutput" ]] && let ++nOutput
 				source "$setup_script" >& >(sed -e "s/^/    [${nOutput:-"="}> /")
 			else

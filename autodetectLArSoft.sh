@@ -427,7 +427,7 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 	declare -i ScoreTry=0
 	while [[ "$LocalDir" != "/" ]]; do
 		declare DirName="$(basename "$LocalDir")"
-		declare DirRealName="$(basename "$(greadlink -f "$LocalDir")")"
+		declare DirRealName="$(basename "$(grealpath "$LocalDir")")"
 		
 		DBGN 2 "  '${DirName}'${DirRealName:+" ( => '${DirRealName}')"}..."
 		

@@ -4,7 +4,7 @@
 #
 
 SCRIPTDIR="$(dirname "$0")"
-: ${BASEDIR:="$(dirname "$(greadlink -f "$SCRIPTDIR")")"}
+: ${BASEDIR:="$(dirname "$(grealpath "$SCRIPTDIR")")"}
 : ${SRCDIR:="${BASEDIR}/srcs"}
 
 for Dir in "$SRCDIR"/* ; do

@@ -3,8 +3,8 @@
 # This sets up a runtime environment for larsoft.
 #
 
-type -t greadlink >& /dev/null || { echo "Environment is not correctly set up -- greadlink not available." >&2 ; return 1 ; }
-declare local_scriptdir="$(dirname "$(greadlink -f "${BASH_SOURCE:-$0}")")"
+type -t grealpath >& /dev/null || { echo "Environment is not correctly set up -- grealpath not available." >&2 ; return 1 ; }
+declare local_scriptdir="$(dirname "$(grealpath "${BASH_SOURCE:-$0}")")"
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || SOURCECMD="source"
 $SOURCECMD "${local_scriptdir}/setup" 'develop' "$@"
 unset local_scriptdir

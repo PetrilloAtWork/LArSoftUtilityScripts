@@ -27,7 +27,7 @@ function isDirUnder() {
 	local ParentDir="$2"
 	[[ -z "$ParentDir" ]] && return 1
 	
-	local FullDir="$(greadlink -f "$Dir")"
+	local FullDir="$(grealpath "$Dir")"
 	[[ -z "$FullDir" ]] && return 1
 	while [[ ! "$FullDir" -ef "$ParentDir" ]]; do
 		[[ "$FullDir" == '/' ]] && return 1

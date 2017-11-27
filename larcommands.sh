@@ -45,7 +45,7 @@ BASESCRIPTVERSION="2.7"
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 
-: ${BASEDIR:="$(dirname "$(greadlink -f "$BASESCRIPTDIR")")"}
+: ${BASEDIR:="$(dirname "$(grealpath "$BASESCRIPTDIR")")"}
 
 declare -r BeginTag="%"
 declare -r EndTag="%"

@@ -27,7 +27,7 @@ function isDirUnder() {
 	local ParentDir="$2"
 	[[ -z "$ParentDir" ]] && return 1
 	
-	local FullDir="$(greadlink -f "$Dir")"
+	local FullDir="$(grealpath "$Dir")"
 	[[ -z "$FullDir" ]] && return 1
 	while [[ ! "$FullDir" -ef "$ParentDir" ]]; do
 		[[ "$FullDir" == '/' ]] && return 1
@@ -41,7 +41,7 @@ function isGITrepository() {
 	# returns success if Dir is contained in a GIT repository
 	local Dir="${1:-"$(pwd)"}"
 	
-	local FullDir="$(greadlink -f "$Dir")"
+	local FullDir="$(grealpath "$Dir")"
 	[[ -z "$FullDir" ]] && return 1
 	while [[ ! -d "${FullDir}/.git" ]]; do
 		[[ "$FullDir" == '/' ]] && return 1

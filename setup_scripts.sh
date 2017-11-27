@@ -19,16 +19,18 @@ else
 fi
 
 ###############################################################################
-### greadlink
+### grealpath
 ###
-if ! type -t greadlink > /dev/null ; then
+if ! type -t grealpath > /dev/null ; then
 	# aliases are not expanded in non-interactive shells, so let's use a function
 	if type -t realpath > /dev/null ; then
-		function greadlink() { realpath "$@" ; }
+		function grealpath() { realpath "$@" ; }
+	elif type -t greadlink > /dev/null ; then
+		function grealpath() { greadlink -f "$@" ; }
 	else
-		function greadlink() { readlink "$@" ; }
+		function grealpath() { readlink -f "$@" ; }
 	fi
-	export -f greadlink 
+	export -f grealpath 
 fi
 
 ###############################################################################
