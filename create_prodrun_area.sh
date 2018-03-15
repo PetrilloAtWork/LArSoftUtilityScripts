@@ -7,6 +7,9 @@
 #     first version
 # 1.1 (20140925, petrillo@fnal.gov)
 #     updated default qualifiers (e5 -> e6)
+# 1.2 (20171016, petrillo@fnal.gov)
+#     updated default qualifiers (e10 -> e14);
+#     restored magic 'job' directory name
 #
 
 SCRIPTNAME="$(basename "$0")"
@@ -164,7 +167,9 @@ function CreateProductionArea() {
 		fi
 	fi
 	
-	# create a little structure in the area
+	# create a little structure in the area;
+	# the directory name 'job' is chosen because most experiments
+	# set that name up as part of the local FHiCL search path
 	mkdir -p "${AreaDir}/logs" "${AreaDir}/job"
 	
 	local SetupLink="${AreaDir}/setup"
