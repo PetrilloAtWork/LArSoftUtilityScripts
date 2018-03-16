@@ -10,15 +10,17 @@
 # 1.2 (20171016, petrillo@fnal.gov)
 #     updated default qualifiers (e10 -> e14);
 #     restored magic 'job' directory name
+# 1.3 (20180315, petrillo@fnal.gov)
+#     updated default qualifiers (e14 -> e15);
 #
 
 SCRIPTNAME="$(basename "$0")"
-VERSION="1.1"
+VERSION="1.3"
 
 : ${BASEDIR:="."}
 
 declare -a StandardQualifiers
-StandardQualifiers=(       'e14:debug'  'e14:prof'   )
+StandardQualifiers=(       'e15:debug'  'e15:prof'   )
 StandardQualifierAliases=( 'debug' 'prof' )
 
 function help() {
