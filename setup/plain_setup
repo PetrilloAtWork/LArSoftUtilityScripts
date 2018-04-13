@@ -177,6 +177,9 @@ function DoPlainSetup() {
 					echo " * ${setup_experiment} specific setup"
 					setup_base_script="/cvmfs/lariat.opensciencegrid.org/setup_lariat.sh"
 					;;
+				( 'local' )
+					echo " * generic local setup"
+					setup_base_script=""
 				( * )
 					# this is experiment-agnostic setup:
 					echo " * generic LArSoft setup (${setup_experiment})"
@@ -188,7 +191,9 @@ function DoPlainSetup() {
 				which mrb >& /dev/null || setup mrb || let ++nErrors
 				[[ -z "$MRB_PROJECT" ]] && export MRB_PROJECT=larsoft
 			else
-				echo "    base setup script '${setup_base_script}' not available -- using local setup."
+				if [[ -n "$setup_base_script" ]]; then
+					echo "    base setup script '${setup_base_script}' not available -- using local setup."
+				fi
 				setup_base_script=":golocal:"
 			fi
 			
