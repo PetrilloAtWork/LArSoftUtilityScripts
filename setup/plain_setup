@@ -169,6 +169,10 @@ function DoPlainSetup() {
 					echo " * SBND specific setup"
 					setup_base_script="/cvmfs/sbnd.opensciencegrid.org/products/sbnd/setup_sbnd.sh"
 					;;
+				( 'ICARUS' )
+					echo " * ICARUS specific setup"
+					setup_base_script="/cvmfs/icarus.opensciencegrid.org/products/icarus/setup_icarus.sh"
+					;;
 				( 'LArIAT' )
 					echo " * ${setup_experiment} specific setup"
 					setup_base_script="/cvmfs/lariat.opensciencegrid.org/setup_lariat.sh"
