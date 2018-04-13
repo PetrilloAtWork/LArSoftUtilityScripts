@@ -441,11 +441,24 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
 						continue 2
 						;;
+					( 'ICARUS' )
+						ExperimentTry='ICARUS'
+						let ScoreTry+=1
+						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
+						continue 2
+						;;
 					( 'LAR1ND' | 'SBND' )
 						ExperimentTry='SBND'
 						let ScoreTry+=1
 						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
 						continue 2
+						;;
+					( 'ARGONEUT' )
+						ExperimentTry='ArgoNeuT'
+						let ScoreTry+=1
+						DBGN 1 "  => experiment might be: '${ExperimentTry}'"
+						continue 2
+						;;
 					( 'LARIAT' )
 						ExperimentTry='LArIAT'
 						let ScoreTry+=1
@@ -526,6 +539,8 @@ if [[ -z "$Experiment" ]]; then
 		Experiment="LArIAT"
 	elif [[ -d "/uboone" ]]; then
 		Experiment="MicroBooNE"
+	elif [[ -d "/icarus" ]]; then
+		Experiment="ICARUS"
 	fi
 	DBGN 1 "Experiment forcibly set to: '${Experiment}'"
 fi
