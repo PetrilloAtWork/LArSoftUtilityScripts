@@ -308,7 +308,7 @@ function DoPlainSetup() {
 				( 'LBNE' | 'DUNE' )
 					codenames=( "${codenames[@]}" )
 					;;
-				( 'SBND' )
+				( 'SBND' | 'ICARUS' )
 					codenames=( "${codenames[@]}" )
 					;;
 				( 'AllExperiments' )
