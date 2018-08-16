@@ -134,4 +134,22 @@ function setup_as() {
 	return $nErrors
 } # setup_as()
 
+################################################################################
+### bash completion
+###
+function LArScript_setup_completions() {
+  
+  local CompletionScriptDir="${LARSCRIPTDIR}/completion"
+  local CompletionScript
+  for CompletionScript in "$CompletionScriptDir"/* ; do
+    [[ -r "$CompletionScript" ]] || continue
+    source "$CompletionScript"
+  done
+  
+  unset LArScript_setup_completions
+} # LArScript_setup_completions
+
+LArScript_setup_completions
+
+
 
