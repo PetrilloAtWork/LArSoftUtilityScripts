@@ -163,7 +163,7 @@ function DoPlainSetup() {
 					;;
 				( 'LBNE' | 'DUNE' )
 					echo " * DUNE specific setup"
-					setup_base_script="/cvmfs/uboone.opensciencegrid.org/products/dune/setup_dune.sh"
+					setup_base_script="/cvmfs/dune.opensciencegrid.org/products/dune/setup_dune.sh"
 					;;
 				( 'SBND' )
 					echo " * SBND specific setup"
