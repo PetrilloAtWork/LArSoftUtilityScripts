@@ -871,13 +871,29 @@ function PrintLocalPackage() {
 	# the only (supported) way to use a package is to set it up via UPS
 	local PACKAGE="$(tr '[:lower:]' '[:upper:]' <<< "$Package" )"
 	local SetupVarName="SETUP_${PACKAGE}"
-	[[ -z "${!SetupVarName}" ]] && return 1
+	local UPSpackage='' Version='' Qualifiers='' Repository=''
 	
-	# get information about the UPS package
-	read UPSpackage Version Qualifiers Repository <<< "$(PrintUPSsetup "$Package" Package Version Qualifiers Repository)"
-	
-	[[ "$Package" != "$UPSpackage" ]] && echo -n "[MISMATCH: ${Package}] "
-	echo -n "${UPSpackage} ${Version} (${Qualifiers:-"no quals"})"
+	if [[ -n "${!SetupVarName}" ]]; then
+		# get information about the UPS package
+		read UPSpackage Version Qualifiers Repository <<< "$(PrintUPSsetup "$Package" Package Version Qualifiers Repository)"
+		
+		[[ "$Package" != "$UPSpackage" ]] && echo -n "[MISMATCH: ${Package}] "
+		echo -n "${UPSpackage} ${Version} (${Qualifiers:-"no quals"})"
+	else
+		# maybe it's set up from `mrbsetenv`? look for other typical UPS variables
+		local VarNameSuffix
+		for VarNameSuffix in 'LIB' 'DIR' ; do
+			local VarName="${PACKAGE}_${VarNameSuffix}"
+			[[ -z "${!VarName}" ]] && continue
+			Repository="$MRB_INSTALL"
+			break
+		done
+		[[ -z "$Repository" ]] && return 1
+		Qualifiers="$MRB_QUALS"
+		local UPSproductDeps="${MRB_SOURCE}/${Package}/ups/product_deps"
+		[[ -r "$UPSproductDeps" ]] && Version="$(read Dummy PackageName Version DefQual Comments < <(grep -E '^[[:blank:]]*parent[[:blank:]]+' "$UPSproductDeps") && echo "$Version")" 
+		echo -n "${Package} ${Version} (${Qualifiers:-"no quals"})"
+	fi
 	
 	# if that is the same as the local one, 
 	if [[ "$MRB_INSTALL" == "$Repository" ]]; then
