@@ -123,9 +123,10 @@ declare -i NPostProcessWriters=0
 #
 declare -a StandardPackages
 StandardPackages=(
-	larcoreobj lardataobj larsimobj
+	larcoreobj lardataobj # larsimobj
+	larcorealg lardataalg # larsimobj
 	larcore lardata larevt larsim larreco larana
-	lareventdisplay larpandora larsoft
+	lareventdisplay larpandoracontent larpandora larwirecell larsoft
 	larexamples
 )
 declare -a OptionalPackages
