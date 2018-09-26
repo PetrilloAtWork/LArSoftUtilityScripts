@@ -132,7 +132,7 @@ function CompileAllDirs() {
 	# Otherwise, the compilation is attempted with `make`
 	# and the return code is the one from make.
 	local -i Level="$1"
-	local Dir="$2"
+	local Dir="${2:-.}"
 	
 	if ! isCompilableDirectory "$Dir" ; then
 		ERROR "Make system in use does not support per-directory make${Dir:+" under '${Dir}'"}: skipped (treated as failure!)"
