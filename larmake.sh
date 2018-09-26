@@ -17,6 +17,7 @@ SwitchScript="${SCRIPTDIR}/larswitch.sh"
 
 ###############################################################################
 
+[[ -n "$SETUP_CMAKE" ]] || FATAL 1 "It appears compilation environment is not set up."
 
 BuildDir="$CWD"
 if ! isMRBBuildArea "$BuildDir" ; then
