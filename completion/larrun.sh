@@ -2,6 +2,8 @@
 
 function _BashCompletion_larrun() {
   
+  [[ -n "$BASHCOMPLETION_DEBUG" ]] && set -x
+  
   local LArRun="$1"
   local CompleteMe="$2"
   local Previous="$3"
@@ -29,7 +31,8 @@ function _BashCompletion_larrun() {
   # then parse argument by argument, until just before the one being completed
   if [[ -z "$Mode" ]]; then
     local iWord
-    for (( iWord = 1 ; iWord < ${#COMP_WORDS[@]} - 1; ++iWord )); do
+    # should we care of what follows the completing word?
+    for (( iWord = 1 ; iWord < $COMP_CWORD; ++iWord )); do
       local Word="${COMP_WORDS[iWord]}"
       case "$Mode" in
         ( 'FHiCL' )
@@ -89,13 +92,15 @@ function _BashCompletion_larrun() {
     fi
   fi
   
+  [[ -n "$BASHCOMPLETION_DEBUG" ]] && set +x
+  
   #
   # supposedly we know what to do now
   #
   case "$Mode" in
     ( 'FHiCL' )
       
-      COMPREPLY=( $(FindInPath.py --fcl --name --regex="^${CompleteMe#--config=}" | sort -u) )
+      COMPREPLY=( $(FindInPath.py --fcl --name --regex="^${CompleteMe#--config=}" 2> /dev/null | sort -u) )
       
       # add back `--config=` if needed
       if [[ "${CompleteMe#--config=}" != "$CompleteMe" ]]; then
@@ -107,7 +112,7 @@ function _BashCompletion_larrun() {
       return 0
       ;;
     ( 'source' )
-      COMPREPLY=( $( compgen -G "${CompleteMe}*.root" ) )
+      COMPREPLY=( $( compgen -o plusdirs -A file -X '!*.root' "$CompleteMe" ) )
       return 0
       ;;
     ( * )
