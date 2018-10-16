@@ -36,11 +36,15 @@
 #   support for branch matching via regular expressions
 # 20170222 (petrillo@fnal.gov) [v2.7]
 #   updated the list of LArSoft core repositories
+# 20180412 (petrillo@fnal.gov)       
+#   updated the list of LArSoft core repositories
+# 20180926 (petrillo@fnal.gov) [v2.8]
+#   updated the list of LArSoft core repositories again
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
 BASESCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-BASESCRIPTVERSION="2.7"
+BASESCRIPTVERSION="2.8"
 
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
@@ -68,6 +72,8 @@ declare -ar LARSOFTCOREPACKAGES=(
 	'larcoreobj'
 	'lardataobj'
 	'larsoftobj'
+	'larcorealg'
+	'lardataalg'
 	'larcore'
 	'lardata'
 	'larevt'
