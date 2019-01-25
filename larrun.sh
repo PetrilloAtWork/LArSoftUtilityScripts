@@ -75,12 +75,14 @@
 #     added consistency check on profiling options
 # 1.31 (petrillo@fnal.gov)
 #     igprof set to track only 'lar' processes
+# 1.32 (petrillo@fnal.gov)
+#     added `--inject-XXX` option shortcuts
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.31"
+SCRIPTVERSION="1.32"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -204,6 +206,16 @@ function help() {
 	    inclusion of the optional configuration by --include option); multiple
 	    directives can be specified by using this options multiple times;
 	    do not abuse it: it makes harder to rerun jobs!
+	--inject-service=ServiceName:FCLdirective
+	--inject-source=FCLdirective
+	--inject-producer=ModuleLabel.FCLdirective
+	--inject-filter=ModuleLabel.FCLdirective
+	--inject-analyzer=ModuleLabel.FCLdirective
+	--inject-output=ModuleLabel.FCLdirective
+	    adds the specified configuration line into the configuration of the
+            specified service or module (see \`--inject\` for details).
+	    Example: \`--inject-producer="generator.fluxType: parallel" is equivalent
+	    to \`--inject="physics.producers.generator.fluxType: parallel"\`.
 	
 	 (profiling options)
 	--core[=LIMIT]
@@ -1206,7 +1218,8 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--nowrap' )                 UseConfigWrapper=0 ;;
 			( '--precfg='* )               PrependConfigFiles=( "${PrependConfigFiles[@]}" "${Param#--*=}" ) ;;
 			( '--include='* )              AppendConfigFiles=( "${AppendConfigFiles[@]}" "${Param#--*=}" ) ;;
-			( '--inject='* )               AppendConfigLines=( "${AppendConfigLines[@]}" "${Param#--*=}" ) ;;
+			( '--inject='* )               AppendConfigLines+=( "${Param#--*=}" ) ;;
+			( '--inject-'*=* )             AppendConfigLines+=( ">${Param#--inject-}" ) ;;
 			( '--seedfromevents' )         SeedFromEvents="rns" ;;
 			( '--seedfromevents='* )       SeedFromEvents="${Param#--*=}" ;;
 			( '--seedfromfile='* )
@@ -1616,8 +1629,34 @@ if isFlagSet UseConfigWrapper ; then
 		
 		# including additional configuration from command line:
 		EOI
+		
 		for ConfigLine in "${AppendConfigLines[@]}" ; do
-			echo "$ConfigLine" >> "$WrappedConfigPath"
+			DBGN 1 "Processing injected config line: '${ConfigLine}'"
+			ConfigLinePrefix=''
+			if [[ "${ConfigLine:0:1}" == '>' ]]; then # check for internal marker
+				ConfigLineTag="${ConfigLine%%=*}"
+				ConfigLineTag="${ConfigLineTag:1}"
+				ConfigLine="${ConfigLine#*=}"
+				DBGN 2 " => it's special, of type '${ConfigLineTag}' (\"${ConfigLine}\")"
+				case "$ConfigLineTag" in
+					( 'service' ) # in `services`
+						ConfigLinePrefix="${ConfigLineTag}s."
+						;;
+					( 'producer' | 'analyzer' | 'filter' ) # in `physics.*`
+						ConfigLinePrefix="physics.${ConfigLineTag}s."
+						;;
+					( 'source' ) # in `source`
+						ConfigLinePrefix="${ConfigLineTag}."
+						;;
+					( 'output' ) # in `outputs`
+						ConfigLinePrefix="${ConfigLineTag}s."
+						;;
+					( * )
+						FATAL 1 "Type '${ConfigLineTag}' of configuration line to be injected is not known."
+						;;
+				esac
+			fi
+			echo "${ConfigLinePrefix}${ConfigLine}" >> "$WrappedConfigPath"
 		done
 	fi
 	
