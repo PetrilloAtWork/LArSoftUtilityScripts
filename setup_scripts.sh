@@ -10,7 +10,7 @@ export LARSCRIPTDIR
 
 
 ###############################################################################
-###
+### set up
 ###
 if declare -F AddToPath >& /dev/null ; then
 	AddToPath PATH "$LARSCRIPTDIR"
@@ -50,6 +50,7 @@ if [[ -x "${LARSCRIPTDIR}/FindInPath.py" ]]; then
 	alias FindFCL="${LARSCRIPTDIR}/FindInPath.py --fcl"
 fi
 
+
 ###############################################################################
 ### gotorepo , nextrepo , prevrepo
 ###
@@ -68,6 +69,77 @@ if [[ -x "${LARSCRIPTDIR}/largotorepo.sh" ]]; then
 	function nextrepo() { gotorepo ${1:-+1} ; }
 	function prevrepo() { gotorepo -${1:-1} ; }
 fi
+
+
+###############################################################################
+### setupLatest
+###
+
+function setupLatest() {
+  
+  local Option
+  local DoHelp=0 Quiet=0 Fake=0
+  local -a RequiredQualifiers
+  OPTIND=1
+  while getopts ":q:Qnh-" Option ; do
+    case "$Option" in
+      ( 'q' ) RequiredQualifiers+=( ${OPTARG//:/ } ) ;;
+      ( 'Q' ) Quiet=1 ;;
+      ( 'n' ) Fake=1 ;;
+      ( 'h' ) DoHelp=1 ;;
+      ( '-' ) break ;;
+      ( * )
+        if [[ "$Option" == '?' ]] && [[ "$OPTARG" == '?' ]]; then
+          DoHelp=1
+        else
+          CRITICAL "$OPTERR" "${FUNCNAME}: option '${OPTARG}' not supported."
+          return
+        fi
+        ;;
+    esac
+  done
+  shift $((OPTIND - 1))
+  
+  if isFlagSet DoHelp ; then
+		cat <<-EOH
+			
+			${FUNCNAME}  [options] ProductName [Qualifiers]
+			
+			Sets the Returns the latest product version with at least the specified qualifiers.
+			The output format is:
+			    
+			    <ProductName> <Version> <Qualifiers>
+			    
+			Options:
+			-q QUALIFIERS
+			    additional required qualifiers
+			-Q
+			    do not print the setup command being issued
+			-n
+			    do not actually issue the setup command (dry run)
+			-h , -?
+			    print this help
+		
+		EOH
+    return 
+  fi
+  
+  local Product="$1"
+  local RequiredQualifiers="$2"
+  
+  local -a LatestProduct
+  LatestProduct=( $( "${LARSCRIPTDIR}/findLatestUPS.sh" "$Product" "$RequiredQualifiers" ) )
+  local res=$?
+  if [[ $res != 0 ]]; then
+    CRITICAL $res "No product '${Product}' found${RequiredQualifiers:+" compatible with all qualifiers '${RequiredQualifiers}'"}" >&2
+    return $res
+  fi
+  local -a Cmd=( setup "${LatestProduct[0]}" "${LatestProduct[1]}" -q "${LatestProduct[2]}" )
+  isFlagUnset Quiet && echo "${Cmd[@]}"
+  isFlagUnset Fake && source "$(ups "${Cmd[@]}" )"
+  
+} # setupLatest()
+
 
 ###############################################################################
 ### setup_LArSoft , setup_as_LArSoft, setup_as
