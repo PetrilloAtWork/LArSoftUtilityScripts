@@ -14,9 +14,11 @@
 #   bug fix: default output should print directory, not full path
 # 20170517 (petrillo@fnal.gov) [v1.3]
 #   added --fw option
+# 20190212 (petrillo@slac.stanford.edu) [v1.4]
+#   added --python option
 #
 
-__version__ = "1.3"
+__version__ = "1.4"
 __doc__ = """
 Looks for files in the search directories specified in the given variables.
 """
@@ -184,6 +186,10 @@ if __name__ == "__main__":
 	InputOptions.add_argument('--fw', dest="VarNames",
 	  action="append_const", const='FW_SEARCH_PATH',
 	  help="uses FW_SEARCH_PATH as variable (equivalent to '--varname=FW_SEARCH_PATH')"
+	  )
+	InputOptions.add_argument('--python', '--py', dest="VarNames",
+	  action="append_const", const='PYTHONPATH',
+	  help="uses PYTHONPATH as variable (equivalent to '--varname=PYTHONPATH')"
 	  )
 	InputOptions.add_argument('--suffix', dest="Suffixes", action="append",
 	  help="only prints entries with this suffix (can be specified multiple times)"
