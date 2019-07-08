@@ -213,9 +213,25 @@ function help() {
 	--inject-analyzer=ModuleLabel.FCLdirective
 	--inject-output=ModuleLabel.FCLdirective
 	    adds the specified configuration line into the configuration of the
-            specified service or module (see \`--inject\` for details).
+	    specified service or module (see \`--inject\` for details).
 	    Example: \`--inject-producer="generator.fluxType: parallel" is equivalent
 	    to \`--inject="physics.producers.generator.fluxType: parallel"\`.
+	--processname=NewProcessName
+	    overrides the process name specified in the configuration
+	--dropinput=Branch
+	--keepinput=Branch
+	    overrides the source input commands demanding the preservation or the
+	    elimination of a set of branches from the input tree; format of Branch is
+	    \`<data product class>_<module label>_<data product instance>_<process>\`
+	    and any element can be replaced by a wildcard matching everything, \`*\`;
+	    order matters, and art \`RootInput\` module will apply its rules to
+	    determine the actual actions
+	--dropprocess=ProcessName
+	--keepprocess=ProcessName
+	    overrides the source input commands demanding the preservation or the
+	    elimination of all data products produced by the process with the
+	    specified name; order matters, and art \`RootInput\` module will apply its
+	    rules to determine the actual actions
 	
 	 (profiling options)
 	--core[=LIMIT]
@@ -1065,6 +1081,31 @@ function ImportFCLfileInWorkArea() {
 } # ImportFCLfileInWorkArea()
 
 
+function ScheduleInputCommands() {
+  # converts drop/keep options into input commands
+  
+  [[ "${#InputCommands[@]}" == 0 ]] && return
+  
+  # start the command with removing or keeping everything
+  local InputCommandLine
+  if [[ "${InputCommands[0]}" =~ ^[[:blank:]]*keep ]]; then
+    InputCommandLine='"drop *"'
+  elif [[ "${InputCommands[0]}" =~ ^[[:blank:]]*drop ]]; then
+    InputCommandLine='"keep *"'
+  else
+    FATAL 1 "Internal error: malformed input command '${InputCommands[0]}'"
+  fi
+  
+  local InputCommand
+  for InputCommand in "${InputCommands[@]}" ; do
+    InputCommandLine+=", \"${InputCommand}\""
+  done
+  
+  AppendConfigLines+=( "source.inputCommands: [ ${InputCommandLine[@]} ]" )
+  
+} # ScheduleInputCommands()
+
+
 function ConfigurationReseeder() {
 	#
 	# The purpose of this function is to add a sequence of statements at the end
@@ -1175,6 +1216,7 @@ declare -i DoHelp=0 DoVersion=0 OnlyPrintEnvironment=0 FollowLog=0 NoLogDump=0 U
 
 declare -i NoMoreOptions=0
 declare ConfigFile
+declare NewProcessName
 declare -a Params
 declare -i nParams=0
 declare -a SourceFiles
@@ -1184,6 +1226,7 @@ declare -i PrependExecutableNParameters
 declare -a PrependConfigFiles
 declare -a AppendConfigFiles
 declare -a AppendConfigLines
+declare -a InputCommands
 declare -a DebugModules
 declare -i OneStringCommand=0
 declare DumpConfigMode="Yes"
@@ -1234,6 +1277,11 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--seedfromlog='* )          SeedLogFile="${Param#--*=}" ;;
 			( '--debugmodules' )           DebugModules=( "*" ) ;;
 			( '--debugmodules='* )         DebugModules=( $(SplitByComma "${Param#--*=}") ) ;;
+			( '--processname='* )          NewProcessName="${Param#--*=}" ;;
+			( '--dropinput='* )            InputCommands+=( "drop ${Param#--*=}" ) ;;
+			( '--dropprocess='* )          InputCommands+=( "drop *_*_*_${Param#--*=}" ) ;;
+			( '--keepinput='* )            InputCommands+=( "keep ${Param#--*=}" ) ;;
+			( '--keepprocess='* )          InputCommands+=( "keep *_*_*_${Param#--*=}" ) ;;
 			
 			### profiling options
 			( '--prepend='* )
@@ -1484,12 +1532,14 @@ case "$DumpConfigMode" in
 			( 'Only' ) ConfigDumpOption='--dump-config' ;;
 			( * ) FATAL 1 "Internal error: incomplete implementation, DumpConfigMode='${DumpConfigMode}'" ;;
 		esac
-		LArParams=( "${LArParams[@]}" '--config-out' "$DebugConfigFile" )
-		OutputParams=( "${OutputParams[@]}" "$((${#LArParams[@]} - 1))" )
+		LArParams+=( '--config-out' "$DebugConfigFile" )
+		OutputParams+=( "$((${#LArParams[@]} - 1))" )
 		;;
 	( * )
 		FATAL 1 "Internal error: unsupported DumpConfigMode='${DumpConfigMode}'"
 esac
+
+[[ -n "$NewProcessName" ]] && LArParams+=( '--process-name' "$NewProcessName" )
 
 #
 # prepare an empty sandbox
@@ -1623,6 +1673,10 @@ if isFlagSet UseConfigWrapper ; then
 			echo "#include \"${IncludeFile}\"" >> "$WrappedConfigPath"
 		done
 	fi
+	
+	
+	# process the arguments that still need processing
+	ScheduleInputCommands
 	
 	if [[ "${#AppendConfigLines[@]}" -gt 0 ]]; then
 		cat <<-EOI >> "$WrappedConfigPath"
@@ -1768,6 +1822,9 @@ if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
 	for ConfigLine in "${#AppendConfigLines[@]}" ; do
 		echo "    ${ConfigLine}" >> "$AbsoluteLogPath"
 	done
+fi
+if [[ -n "$NewProcessName" ]]; then
+  echo "Process name overridden: '${NewProcessName}'" >> "$AbsoluteLogPath"
 fi
 
 [[ "$DumpConfigMode" != "No" ]] && echo "Configuration dump into: '${DebugConfigFile}'" >> "$AbsoluteLogPath"
