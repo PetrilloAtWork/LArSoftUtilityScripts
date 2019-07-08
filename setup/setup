@@ -100,7 +100,7 @@ function DoSetup_LArSoft() {
 	###
 	local setup_mode="$(tr '[:upper:]' '[:lower:]' <<< "${1:-all}")"
 	case "$setup_mode" in
-		( 'base' | 'develop' | 'runtime' | 'all' | 'prod' ) ;;
+		( 'base' | 'develop' | 'runtime' | 'all' | 'prod' | 'art_env' ) ;;
 		( 'step_'* ) ;;
 		( * ) setup_mode='all' ;;
 	esac
@@ -184,6 +184,17 @@ function DoSetup_LArSoft() {
 	case "$setup_mode" in
 		( 'develop' | 'all' | 'step_build' )
 			_setup_element 'build' || let ++setup_myErrors
+			;;
+		( * ) ;;
+	esac
+	
+	
+	###
+	### art running environment for the local MRB directory
+	###
+	case "$setup_mode" in
+		( 'runtime' | 'develop' | 'prod' | 'all' | 'step_artenv' )
+			_setup_element 'artenv' || let ++setup_myErrors
 			;;
 		( * ) ;;
 	esac

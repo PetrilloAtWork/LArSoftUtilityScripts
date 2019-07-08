@@ -96,6 +96,7 @@ function DoPlainSetup() {
 		  | 'localproductssetup' | 'slp' \
 		  | 'larsoft' \
 		  | 'build' \
+		  | 'artenv' \
 		  )
 			;;
 		( * )
@@ -362,6 +363,40 @@ function DoPlainSetup() {
 			"${MRBsetEnv[@]}" >& >(sed -e "s/^/    [${nOutput}> /")
 			return
 			;; # build
+		
+		( 'artenv' | 'setp_artenv' )
+			###
+			### art running environment setup
+			###
+			
+			local CandidatePath
+			# set up additional configuration file paths
+			for CandidatePath in             \
+			  ${MRB_TOP:+"${MRB_TOP}/job"}   \
+			  ${MRB_TOP:+"${MRB_TOP}/jobs"}  \
+			  "$(pwd)/job"                   \
+			  "$(pwd)/jobs"                  \
+			  ;
+			do
+				[[ -d "$CandidatePath" ]] || continue
+				FHICL_FILE_PATH="${FHICL_FILE_PATH:+${FHICL_FILE_PATH}:}${CandidatePath}"
+			done
+			_PurgeDuplicatesFromPath FHICL_FILE_PATH
+			
+			# set up additional data file paths
+			for CandidatePath in              \
+			  ${MRB_TOP:+"${MRB_TOP}/data"}   \
+			  ${MRB_TOP:+"${MRB_TOP}/fwdata"} \
+			  "$(pwd)/data"                   \
+			  "$(pwd)/fwdata"                 \
+			  ;
+			do
+				[[ -d "$CandidatePath" ]] || continue
+				FW_SEARCH_PATH="${FW_SEARCH_PATH:+${FW_SEARCH_PATH}:}${CandidatePath}"
+			done
+			_PurgeDuplicatesFromPath FW_SEARCH_PATH
+			return
+			;; # artenv
 		
 		( * )
 			echo "ERROR: setup submode '${setup_mode}' not supported." >&2
