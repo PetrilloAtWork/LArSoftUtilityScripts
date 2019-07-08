@@ -5,7 +5,7 @@
 #
 
 declare local_create_area_DefaultVersion="${LARCORE_VERSION:-"develop"}"
-declare local_create_area_DefaultQual="${MRB_QUAL:-"e9:debug"}"
+declare local_create_area_DefaultQual="${MRB_QUAL:-"e17:debug"}"
 
 function IsInList() {
 	# IsInList Key ListItem [...]
