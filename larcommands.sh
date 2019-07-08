@@ -40,11 +40,14 @@
 #   updated the list of LArSoft core repositories
 # 20180926 (petrillo@fnal.gov) [v2.8]
 #   updated the list of LArSoft core repositories again
+# 20190419 (petrillo@fnal.gov) [v2.9]
+#   support inversion of branch matching
+#   added `--on` and `--with` option aliases
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
 BASESCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-BASESCRIPTVERSION="2.8"
+BASESCRIPTVERSION="2.9"
 
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
@@ -136,19 +139,24 @@ function help_baseoptions() {
 	ask for '--help=developtions'.
 	
 	Repository selection options:
-	--ifcurrentbranch=BRANCHNAME , --ifcurrentbranch=~BRANCHNAMEREGEX
+	--ifcurrentbranch=[-]BRANCHNAME , --ifcurrentbranch=[-]~BRANCHNAMEREGEX
 	    acts only on repositories whose current branch is BRANCHNAME; it can be
 	    specified more than once, in which case the operation will be performed
 	    if the current branch is any one of the chosen branches; if the second
 	    form is chosen, a bash regular expression is used to match the branch
-	    name
-	--ifhasbranch=BRANCHNAME , --ifhaslocalbranch=BRANCHNAME ,
-	--ifhasbranch=~BRANCHNAMEREGEX , --ifhaslocalbranch=BRANCHNAMEREGEX
+	    name; if a minus sign \`-\` is used, the expression result is negated
+	--on=[-]BRANCHNAME , --on=[-]~BRANCHNAME
+	    exact aliases of \`--ifcurrentbranch\` option
+	--ifhasbranch=[-]BRANCHNAME , --ifhaslocalbranch=[-]BRANCHNAME ,
+	--ifhasbranch=[-]~BRANCHNAMEREGEX , --ifhaslocalbranch=[-]~BRANCHNAMEREGEX
 	    similar to '--ifcurrentbranch' above, performs the action only if the
 	    repository has one of the specified branches; the first form checks all
 	    branches, including the remote ones, while the second checks only local
 	    ones; the other two are equivalent, but a bash regular expression is used
-	    to match the branch name instead of using exact match
+	    to match the branch name instead of using exact match; if a minus
+	    sign \`-\` is used, the expression result is negated
+	--with=[-]BRANCHNAME , --with=[-]~BRANCHNAME
+	    exact aliases of \`--ifhasbranch\` option
 	--only=REGEX
 	    operates only on the repositories whose name matches the specified REGEX
 	--skip=REGEX
@@ -534,11 +542,24 @@ function matchItem() {
   local Value="$1"
   local Key="$2"
   
+  local -i Negate=0
+  
+  if [[ "${Key:0:1}" == '-' ]]; then
+    Negate=1
+    Key="${Key:1}"
+  fi
+  
   if [[ "${Key:0:1}" == '~' ]]; then
     [[ "$Value" =~ ${Key#\~} ]]
   else
     [[ "$Value" == "$Key" ]]
   fi
+  local res=$?
+  # reminder (success is 0 here)
+  # Negate v      res => 0 (match)  1 (no match)
+  #       no: 0        | 0 (pass)   1 (fail)
+  #      yes: 1        | 1 (fail)   0 (pass)
+  [[ "$res" == "$Negate" ]]
   
 } # matchItem()
 
@@ -546,8 +567,8 @@ function matchItem() {
 function matchAnyInList() {
 	# Usage:  matchAnyInList  Sep Key [Key...] Sep [List Items...]
 	# 
-	# Like anyInList, but the key may be a regular expression if introduced by
-	# a tilde.
+	# Like anyInList, but the key may be negated if starting with a minus `-`,
+	# and a regular expression if starting with a tilde.
 	# 
 	
 	DBGN 4 "${FUNCNAME[0]} ${@}"
@@ -1102,10 +1123,10 @@ function StandardOptionParser() {
 		( '--source='* )
 			SourceDir="${Param#--*=}"
 			;;
-		( '--ifcurrentbranch='* )
+		( '--ifcurrentbranch='* | '--on='* )
 			OnlyIfCurrentBranches=( "${OnlyIfCurrentBranches[@]}" "${Param#--*=}" )
 			;;
-		( '--ifhasbranch='* )
+		( '--ifhasbranch='* | '--with='* )
 			OnlyIfHasBranches=( "${OnlyIfHasBranches[@]}" "${Param#--*=}" )
 			;;
 		( '--ifhaslocalbranch='* )
