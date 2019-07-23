@@ -77,12 +77,16 @@
 #     igprof set to track only 'lar' processes
 # 1.32 (petrillo@fnal.gov)
 #     added `--inject-XXX` option shortcuts
+# 1.33 (petrillo@slac.stanford.edu)
+#     added `--no-output` option
+# 1.34 (petrillo@slac.stanford.edu)
+#     added detection of file lists by file name (.list, .txt, .filelist)
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.32"
+SCRIPTVERSION="1.34"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -232,6 +236,8 @@ function help() {
 	    elimination of all data products produced by the process with the
 	    specified name; order matters, and art \`RootInput\` module will apply its
 	    rules to determine the actual actions
+	--no-output
+	    does not run any output module (passed directly to \`art\`)
 	
 	 (profiling options)
 	--core[=LIMIT]
@@ -1227,6 +1233,7 @@ declare -a PrependConfigFiles
 declare -a AppendConfigFiles
 declare -a AppendConfigLines
 declare -a InputCommands
+declare -i NoOutput=0
 declare -a DebugModules
 declare -i OneStringCommand=0
 declare DumpConfigMode="Yes"
@@ -1282,6 +1289,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--dropprocess='* )          InputCommands+=( "drop *_*_*_${Param#--*=}" ) ;;
 			( '--keepinput='* )            InputCommands+=( "keep ${Param#--*=}" ) ;;
 			( '--keepprocess='* )          InputCommands+=( "keep *_*_*_${Param#--*=}" ) ;;
+			( '--no-output' )              NoOutput=1 ;;
 			
 			### profiling options
 			( '--prepend='* )
@@ -1463,11 +1471,11 @@ for (( iParam = 0; iParam < $nParams ; ++iParam )); do
 			[[ -n "$ConfigFile" ]] && [[ "$ConfigFile" != "${Params[iParam]}" ]] && FATAL 1 "Configuration file specified more than once ('${ConfigFile}', then '${Params[iParam]}')"
 			ConfigFile="${Params[iParam]}"
 			;;
-		( *.root )
+		( *.root | *.txt | *.list | *.filelist )
 			SourceFiles=( "${SourceFiles[@]}" "$Param" )
 			;;
 		( * )
-			LArParams=( "${LArParams[@]}" "$Param" )
+			LArParams+=( "$Param" )
 			;;
 	esac
 done
@@ -1540,6 +1548,8 @@ case "$DumpConfigMode" in
 esac
 
 [[ -n "$NewProcessName" ]] && LArParams+=( '--process-name' "$NewProcessName" )
+
+isFlagSet NoOutput && LArParams+=( '--no-output' )
 
 #
 # prepare an empty sandbox
@@ -1757,7 +1767,11 @@ fi
 #
 declare -a SourceParams
 for SourceFile in "${SourceFiles[@]}" ; do
-	SourceParams=( "${SourceParams[@]}" '-s' "$SourceFile" )
+	if [[ "$SourceFile" =~ .root$ ]]; then
+		SourceParams+=( '-s' "$SourceFile" )
+	else
+		SourceParams+=( '-S' "$SourceFile" )
+  fi
 done
 
 #
