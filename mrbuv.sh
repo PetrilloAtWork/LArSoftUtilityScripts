@@ -2,10 +2,39 @@
 #
 # Runs `mrb uv` and deletes the backup files of the files that were not changed.
 #
+# If version is not specified, an attempt is made to detect it from the current
+# working area.
+#
 
+# ------------------------------------------------------------------------------
 function STDERR() { echo "$*" >&2 ; }
 function ERROR() { STDERR "ERROR: $*" ; }
 
+function ExtractPackageVersion() {
+	local ProductDepsFile="$1"
+	local PackageName="$2"
+	grep "^parent" "$UPSdeps" | awk '{ print $3 ; }'
+} # ExtractPackageVersion()
+
+function DetectPackageVersion() {
+  local PackageName="$1"
+  declare UPSdeps="${MRB_SOURCE:-.}/${PackageName}/ups/product_deps"
+  if [[ ! -r "$UPSdeps" ]]; then
+    ERROR "Could not find the product_deps file of '${PackageName}' ('${UPSdeps}')."
+    return 2
+  fi
+  ExtractPackageVersion "$UPSdeps" "$PackageName"
+} # DetectPackageVersion()
+
+
+function Exec() {
+  local -a Cmd=( "$@" )
+  echo "CMD> ${Cmd[@]}"
+  "${Cmd[@]}"
+} # Exec()
+
+
+# ------------------------------------------------------------------------------
 if [[ -z "$MRB_SOURCE" ]]; then
 	ERROR "no MRB working area set up."
 	exit 1
@@ -14,6 +43,36 @@ fi
 cd "$MRB_SOURCE" || exit $?
 
 declare -r TempSuffix=".mrbuvsh"
+
+#
+# figure out which version
+#
+declare -a Arguments=( "$@" )
+declare -ai ArgumentIndices
+for (( iArg = 0 ; iArg < "${#Arguments[@]}" ; ++iArg )); do
+  Arg="${Arguments[iArg]}"
+  [[ "${Arg:0:1}" == "-" ]] || ArgumentIndices+=( "$iArg" )
+done
+
+declare Package="${Arguments[${ArgumentIndices[0]}]}"
+declare Version="${Arguments[${ArgumentIndices[1]}]}"
+declare -p Arguments
+declare -p ArgumentIndices
+if [[ "${#ArgumentIndices[@]}" == 1 ]] || [[ -z "$Version" ]]; then
+  set -x
+  #
+  # attempt autodetection of the version
+  #
+  declare -i VersionIndex="${ArgumentIndices[1]:-${#Arguments[@]}}"
+  Version="$(DetectPackageVersion "$Package")"
+  if [[ $? == 0 ]]; then
+    echo "Autodetected the version of '${Package}' in the working area as: '${Version}'"
+    Arguments[VersionIndex]="$Version"
+  else
+    ERROR "Attempt to discover the version of '${Package}' failed."
+  fi
+  set +x
+fi
 
 #
 # move existing backups out of the way
@@ -30,7 +89,7 @@ done
 #
 # run `mrb uv`
 #
-[[ "$#" -gt 0 ]] && { mrb uv "$@" || exit $? ; }
+[[ "$#" -gt 0 ]] && { Exec mrb uv "${Arguments[@]}" || exit $? ; }
 
 #
 # remove unnecessary backups
