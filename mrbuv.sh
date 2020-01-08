@@ -56,10 +56,12 @@ done
 
 declare Package="${Arguments[${ArgumentIndices[0]}]}"
 declare Version="${Arguments[${ArgumentIndices[1]}]}"
-declare -p Arguments
-declare -p ArgumentIndices
+if [[ "${#ArgumentIndices[@]}" == 0 ]] || [[ -z "$Package" ]]; then
+  declare -i PackageIndex="${ArgumentIndices[0]:-${#Arguments[@]}}"
+  Package='larsoft'
+  Arguments[PackageIndex]="$Package"
+fi
 if [[ "${#ArgumentIndices[@]}" == 1 ]] || [[ -z "$Version" ]]; then
-  set -x
   #
   # attempt autodetection of the version
   #
@@ -71,54 +73,55 @@ if [[ "${#ArgumentIndices[@]}" == 1 ]] || [[ -z "$Version" ]]; then
   else
     ERROR "Attempt to discover the version of '${Package}' failed."
   fi
-  set +x
 fi
 
 #
 # move existing backups out of the way
 #
 for ProductDepsBak in */ups/product_deps.bak ; do
-	RepoName="${ProductDepsBak%%/*}"
-	ProductDepsTempBackup="${ProductDepsBak}${TempSuffix}"
-	
-	echo "Moving away backup in ${RepoName}"
-	mv "$ProductDepsBak" "$ProductDepsTempBackup"
+  [[ -e "$ProductDepsBak" ]] || continue # e.g. in case there is no backup
+  RepoName="${ProductDepsBak%%/*}"
+  ProductDepsTempBackup="${ProductDepsBak}${TempSuffix}"
+
+  echo "Moving away backup in ${RepoName}"
+  mv "$ProductDepsBak" "$ProductDepsTempBackup"
 done
 
 
 #
 # run `mrb uv`
 #
-[[ "$#" -gt 0 ]] && { Exec mrb uv "${Arguments[@]}" || exit $? ; }
+[[ "${#Arguments[@]}" -gt 0 ]] && { Exec mrb uv "${Arguments[@]}" || exit $? ; }
 
 #
 # remove unnecessary backups
 #
 for ProductDepsBak in */ups/product_deps.bak ; do
-	RepoName="${ProductDepsBak%%/*}"
-	ProductDeps="${ProductDepsBak%.bak}"
-	ProductDepsTempBackup="${ProductDepsBak}${TempSuffix}"
-	if [[ ! -r "$ProductDeps" ]]; then
-		ERROR "Can't find the updated '${ProductDeps}' corresponding to the backup '${ProductDepsBak}'"
-		continue
-	fi
-	if cmp --quiet "$ProductDeps" "$ProductDepsBak" ; then
-		# no difference, restore the backup(s)
-		mv "$ProductDepsBak" "$ProductDeps"
-		echo "No change in ${RepoName}."
-		[[ -r "$ProductDepsTempBackup" ]] && mv "$ProductDepsTempBackup" "$ProductDepsBak"
-	else
-		# file is changed...
-		if [[ -r "$ProductDepsTempBackup" ]]; then
-			# ... and we have two backups.
-			# What do we do? the previous backup might be too outdated;
-			# or it might be the real one.
-			# We decide we keep the old one
-			mv "$ProductDepsTempBackup" "$ProductDepsBak"
-			echo "Changed ${RepoName} (keeping the existing backup)."
-		else
-			echo "Changed ${RepoName}."
-		fi
-	fi
+  [[ -e "$ProductDepsBak" ]] || continue # e.g. in case there is no backup
+  RepoName="${ProductDepsBak%%/*}"
+  ProductDeps="${ProductDepsBak%.bak}"
+  ProductDepsTempBackup="${ProductDepsBak}${TempSuffix}"
+  if [[ ! -r "$ProductDeps" ]]; then
+    ERROR "Can't find the updated '${ProductDeps}' corresponding to the backup '${ProductDepsBak}'"
+    continue
+  fi
+  if cmp --quiet "$ProductDeps" "$ProductDepsBak" ; then
+    # no difference, restore the backup(s)
+    mv "$ProductDepsBak" "$ProductDeps"
+    echo "No change in ${RepoName}."
+    [[ -r "$ProductDepsTempBackup" ]] && mv "$ProductDepsTempBackup" "$ProductDepsBak"
+  else
+    # file is changed...
+    if [[ -r "$ProductDepsTempBackup" ]]; then
+      # ... and we have two backups.
+      # What do we do? the previous backup might be too outdated;
+      # or it might be the real one.
+      # We decide we keep the old one
+      mv "$ProductDepsTempBackup" "$ProductDepsBak"
+      echo "Changed ${RepoName} (keeping the existing backup)."
+    else
+      echo "Changed ${RepoName}."
+    fi
+  fi
 done
 
