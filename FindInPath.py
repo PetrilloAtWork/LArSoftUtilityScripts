@@ -18,11 +18,13 @@
 #   added --python option
 # 20200207 (petrillo@slac.stanford.edu) [v1.5]
 #   python3 support
+# 20200207 (petrillo@slac.stanford.edu) [v1.6]
+#   added --view option and related ones
 #
 
 from __future__ import print_function
 
-__version__ = "1.5"
+__version__ = "1.6"
 __doc__ = """
 Looks for files in the search directories specified in the given variables.
 """
@@ -31,6 +33,7 @@ import sys, os
 import logging
 import re
 import fnmatch
+import subprocess
 
 def MatchesPatterns(ItemRecord, Patterns, options = None):
   # no requirement means we accept it
@@ -124,6 +127,32 @@ def FormatRecords(Records, options):
 # FormatRecords()
 
 
+def ShowFiles(args, *paths):
+
+  if not paths: return # nothing to be seen
+
+  commandTemplate = args.ViewCommand if args.ViewCommand else [ "less" ]
+
+  command = []
+  tagFound = False
+  for word in commandTemplate:
+    if args.ViewFileTag not in word:
+      command.append(word)
+      continue
+    tagFound = True
+
+    for path in paths: command.append(word.replace(args.ViewFileTag, path))
+
+  # for word in command
+  if not tagFound: command.extend(paths)
+
+  logging.debug("View command: %s", " ".join(map(repr, command)))
+
+  subprocess.check_call(command)
+
+# ShowFiles()
+
+
 ################################################################################
 
 
@@ -139,6 +168,7 @@ if __name__ == "__main__":
     OutputFormat = "%(FileName)s (in %(Dir)s)",
     SimpleFilters = [],
     RegexFilters = [],
+    ViewCommand = [],
     )
 
   # positional parameters: filters
@@ -213,6 +243,15 @@ if __name__ == "__main__":
   OutputOptions.add_argument('--reverse', '-R', dest="ReverseOrder",
     type=str, help="looks for the latest directories in paths first"
     )
+  OutputOptions.add_argument('--view', '--show', '-v', dest="ViewFiles",
+    action="store_true", help="shows the files found"
+    )
+  OutputOptions.add_argument('--viewcommand', dest="ViewCommand",
+    action="append", help="command for viewing the files"
+    )
+  OutputOptions.add_argument('--viewfiletag', dest="ViewFileTag",
+    default='FILE', help="tag for file name in view command ('%(default)s')"
+    )
 
   # generic program options
   Parser.add_argument('--debug', dest="Debug", action="store_true",
@@ -255,6 +294,9 @@ if __name__ == "__main__":
 
   # print the result on screen
   for entry in Output: print(entry)
+
+  if args.ViewFiles:
+    ShowFiles(args, *(record['Path'] for record in FileRecords))
 
 # explanation:
 # - start with paths in VarNames paths
