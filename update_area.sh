@@ -12,6 +12,8 @@
 #     unsetting the old MRB_INSTALL path from PRODUCTS
 # 20170317 (petrillo@fnal.gov) [v1.3]
 #     updated the list of packages not to learn current version from
+# 20191212 (petrillo@slac.stanford.edu) [v1.4]
+#     updated the list of packages not to learn current version from
 # 
 
 
@@ -23,9 +25,14 @@ fi
 ( # subshell, protect from sourcing
 
 SCRIPTNAME="$(basename -- "$0")"
-SCRIPTVERSION="1.3"
+SCRIPTVERSION="1.4"
 
-declare -ar SkipRepositories=( 'ubutil' 'lbneutil' 'sbndutil' 'larcoreobj' 'lardataobj' 'larsoftobj' )
+declare -ar SkipRepositories=(
+  'ubutil'
+  'lbneutil' 'sbndutil' 'icarusutil'
+  'sbndaq_artdaq_core'
+  'larcoreobj' 'lardataobj' 'larsoftobj'
+  )
 
 function help() {
 	cat <<-EOH
