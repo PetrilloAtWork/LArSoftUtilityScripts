@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 #
 # Lists all the files whose name matches the specified pattern, in a PATH-like
 # list of directories.
@@ -16,9 +16,13 @@
 #   added --fw option
 # 20190212 (petrillo@slac.stanford.edu) [v1.4]
 #   added --python option
+# 20200207 (petrillo@slac.stanford.edu) [v1.5]
+#   python3 support
 #
 
-__version__ = "1.4"
+from __future__ import print_function
+
+__version__ = "1.5"
 __doc__ = """
 Looks for files in the search directories specified in the given variables.
 """
@@ -27,15 +31,6 @@ import sys, os
 import logging
 import re
 import fnmatch
-
-#function PrintFullLDpath() {
-	#/sbin/ldconfig -vNX | grep -v '\t' | sed -e 's/:.*//g' | while read LibDir ; do
-		#[[ $((nLibDirs++)) -gt 0 ]] && echo -n ':'
-		#echo -n "$LibDir"
-	#done
-	#echo
-#} # PrintFullLDpath()
-
 
 def MatchesPatterns(ItemRecord, Patterns, options = None):
 	# no requirement means we accept it
@@ -259,7 +254,7 @@ if __name__ == "__main__":
 	Output = FormatRecords(FileRecords, args)
 	
 	# print the result on screen
-	for entry in Output: print entry
+	for entry in Output: print(entry)
 	
 # explanation:
 # - start with paths in VarNames paths
