@@ -43,11 +43,13 @@
 # 20190419 (petrillo@fnal.gov) [v2.9]
 #   support inversion of branch matching
 #   added `--on` and `--with` option aliases
+# 20200113 (petrillo@slac.stanford.edu) [v2.10]
+#   added `--sourcehere`, `--tophere` and `--fromhere` options
 #
 
 BASESCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
 BASESCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-BASESCRIPTVERSION="2.9"
+BASESCRIPTVERSION="2.10"
 
 : ${SCRIPTNAME:="$(basename "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
 : ${SCRIPTDIR:="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")"}
@@ -165,12 +167,22 @@ function help_baseoptions() {
 	Other options:
 	--source=SOURCEDIR [from MRB_SOURCE; now: '${MRB_SOURCE}']
 	    use SOURCEDIR as base source directory
+	--sourcehere , -S
+	    equivalent to --source="\$(pwd)"
+	--mrbtop=MRBTOP [from MRB_TOP; now: '${MRB_TOP}']
+	    use MRBTOP/srcs as base source directory
+	--mrbtophere , -T
+	    equivalent to --mrbtop="\$(pwd)"
+	--fromhere , -.
+	    equivalent to \`--mrbtophere\` if the current directory has a \`srcs\`
+	    subdirectory, to \`--sourcehere\` otherwise
 	--compact[=MODE]
 	    do not write the git command; out the output of the command according to
 	    MODE:
 	    'prepend' (default): "[%PACKAGENAME%] OUTPUT"
 	    'line': "[%PACKAGENAME%]\nOUTPUT"
 	    'append': "OUTPUT [%PACKAGENAME%]"
+	    'quiet': "OUTPUT"
 	--color[=<false|always|auto>] [always]
 	    uses color to write the repository name, unless the mode is "false";
 	    also it instructs git to use the specified mode for the color output;
@@ -1122,6 +1134,19 @@ function StandardOptionParser() {
 			;;
 		( '--source='* )
 			SourceDir="${Param#--*=}"
+			;;
+		( '--sourcehere' | '-S' )
+			SourceDir="$(pwd)"
+			;;
+		( '--mrbtop='* )
+			SourceDir="${Param#--*=}/srcs"
+			;;
+		( '--tophere' | '-T' )
+			SourceDir="$(pwd)/srcs"
+			;;
+		( '-.' )
+			SourceDir="$(pwd)/srcs"
+			[[ -d "$SourceDir" ]] || SourceDir="$(pwd)"
 			;;
 		( '--ifcurrentbranch='* | '--on='* )
 			OnlyIfCurrentBranches=( "${OnlyIfCurrentBranches[@]}" "${Param#--*=}" )
