@@ -14,15 +14,17 @@
 #     updated default qualifiers (e14 -> e15);
 # 1.4 (20181002, petrillo@slac.stanford.edu)
 #     updated default qualifiers (e15 -> e17);
+# 1.5 (20200323, petrillo@slac.stanford.edu)
+#     updated default qualifiers (e17 -> e19);
 #
 
 SCRIPTNAME="$(basename "$0")"
-VERSION="1.4"
+VERSION="1.5"
 
 : ${BASEDIR:="."}
 
 declare -a StandardQualifiers
-StandardQualifiers=(       'e17:debug'  'e17:prof'   )
+StandardQualifiers=(       'e19:debug'  'e19:prof'   )
 StandardQualifierAliases=( 'debug' 'prof' )
 
 function help() {
