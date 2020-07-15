@@ -134,7 +134,7 @@ function setupLatest() {
     CRITICAL $res "No product '${Product}' found${RequiredQualifiers:+" compatible with all qualifiers '${RequiredQualifiers}'"}" >&2
     return $res
   fi
-  local -a Cmd=( setup "${LatestProduct[0]}" "${LatestProduct[1]}" -q "${LatestProduct[2]}" )
+  local -a Cmd=( setup "${LatestProduct[0]}" "${LatestProduct[1]}" ${LatestProduct[2]:+ -q "${LatestProduct[2]}"} )
   isFlagUnset Quiet && echo "${Cmd[@]}"
   isFlagUnset Fake && source "$(ups "${Cmd[@]}" )"
   
