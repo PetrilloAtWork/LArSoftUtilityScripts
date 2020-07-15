@@ -91,6 +91,10 @@ fi
 
 declare -i nErrors=0
 for LogFile in "${LogFiles[@]}" ; do
+	
+	# by convention a log file is present with the same name as the output directory;
+	# if `LogFile` is actually the output directory, this will point to that log file.
+	[[ -d "$LogFile" ]] && LogFile+=".log"
 	if [[ ! -r "$LogFile" ]]; then
 		ERROR "Log file '${LogFile}' not found!"
 		let ++nErrors
@@ -99,7 +103,7 @@ for LogFile in "${LogFiles[@]}" ; do
 	
 	declare RunDir=''
 	declare RunLogFile=''
-	declare -a Command=
+	declare -a Command=( )
 	
 	while read Line ; do
 		[[ -n "$RunDir" ]] && [[ "${#Command[@]}" -gt 0 ]] && [[ -n "$RunLogFile" ]] && break
@@ -115,7 +119,7 @@ for LogFile in "${LogFiles[@]}" ; do
 		fi
 		
 		if [[ "${Line#Log file: }" != "$Line" ]]; then
-			LogFile="$(sed -e "s/^Log file:[[:blank:]]*'\(.*\)'.*$/\1/g" <<< "$Line")"
+			RunLogFile="$(sed -e "s/^Log file:[[:blank:]]*'\(.*\)'.*$/\1/g" <<< "$Line")"
 			continue
 		fi
 		
@@ -145,13 +149,11 @@ for LogFile in "${LogFiles[@]}" ; do
 	cat <<-EOM
 	Rerunning from '${LogFile}':
 	
-	${Command[@]} >& "${RunLogFile}"
+	${Command[@]}
 	
 	EOM
 	
-#	${Command[@]} >& "$RunLogFile" &
-	PID=$!
-	echo "  [PID=${PID}]"
+	${Command[@]}
 done
 
 if [[ $nErrors -gt 0 ]]; then
