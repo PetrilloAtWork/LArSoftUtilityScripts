@@ -88,6 +88,10 @@ function help() {
 	--defaults , --defaults=DEFAULTFILE
 	    loads default values from the specified file
 	    ('${DEFAULTSFILE}' if not specified)
+	--loose
+	    if set, version is reported even if no qualifier is matched; by default,
+	    the version and qualifiers need to be both detected for the script
+	    to believe the patterns were correctly identified
 	--format=FORMAT , -f FORMAT
 	    use FORMAT directly as format string; the string is printed by the bash
 	    \`printf\` function; the codes for each option are reported in brackets
@@ -346,7 +350,7 @@ function DetectPackageVersion() {
 
 ################################################################################
 declare -i NoMoreOptions=0
-declare -i DefaultsFileRequired=0
+declare -i DefaultsFileRequired=0 LooseMatch=0
 declare DefaultsFile=''
 declare -a Versions
 declare -i nVersions=0
@@ -370,6 +374,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			
 			( '--defaults' )          DefaultsFile="$DEFAULTSFILE" ;;
 			( '--defaults='* )        DefaultsFile="${Param#--*=}"; DefaultsFileRequired=1 ;;
+			( '--loose' )             LooseMatch=1 ;;
 			
 			( '--format=' )           Format="${Param#--format=}" ;;
 			( '--format' | '-f' )     let ++iParam; Format="${!iParam}" ;;
@@ -550,12 +555,24 @@ for LocalDir in "$(pwd)" "$SetupDir" ; do
 done
 
 # if the experiment hasn't been found, never mind
-if [[ -n "$LArSoftVersionBest" ]] && [[ -n "$LArSoftQualifiersBest" ]]; then
-	: ${Experiment:="$ExperimentBest"}
-	: ${LArSoftVersion:="$LArSoftVersionBest"}
-	: ${LArSoftQualifiers:="$LArSoftQualifiersBest"}
+if isFlagSet LooseMatch ; then
+  SetLArSoftVersion=1
+  SetLArSoftQualifiers=1
+  SetExperiment=1
+elif [[ -n "$LArSoftVersionBest" ]] && [[ -n "$LArSoftQualifiersBest" ]]; then
+  SetLArSoftVersion=1
+  SetLArSoftQualifiers=1
+  SetExperiment=1
+else
+  SetLArSoftVersion=0
+  SetLArSoftQualifiers=0
+  SetExperiment=1
 fi
-unset {Experiment,LArSoftVersion,LArSoftQualifiers}{Try,Best}
+
+isFlagSet SetLArSoftVersion && : ${LArSoftVersion:="$LArSoftVersionBest"}
+isFlagSet SetLArSoftQualifiers && : ${LArSoftQualifiers:="$LArSoftQualifiersBest"}
+isFlagSet SetExperiment && : ${Experiment:="$ExperimentBest"}
+unset {Set,}{Experiment,LArSoftVersion,LArSoftQualifiers}{Try,Best}
 
 # still nothing, try to autodetect from the mounted directories
 if [[ -z "$Experiment" ]]; then

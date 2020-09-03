@@ -94,7 +94,7 @@ function DoSetup_LArSoft() {
 	[[ -x "$setup_autodetection_script" ]] || setup_autodetection_script="${SCRIPTDIR}/autodetectLArSoft.sh"
 	[[ -x "$setup_autodetection_script" ]] || setup_autodetection_script="$(dirname "$SCRIPTDIR")/autodetectLArSoft.sh"
 	if [[ -x "$setup_autodetection_script" ]] ; then
-		setup_autodetection=( $("$setup_autodetection_script" --defaults -v -q -e -L -p "$DefaultLArSoftVersion" "$DefaultQualifiers" "LArSoft") )
+		setup_autodetection=( $("$setup_autodetection_script" --defaults --loose -v -q -e -L -p "$DefaultLArSoftVersion" "$DefaultQualifiers" "LArSoft") )
 	else
 		echo "Autodetection skipped." >&2
 		setup_autodetection=( "" "$DefaultQualifiers" "LArSoft" 'larsoft' "" )
