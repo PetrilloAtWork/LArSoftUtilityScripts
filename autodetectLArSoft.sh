@@ -10,6 +10,9 @@
 #
 
 declare SCRIPTNAME="$(basename "$0")"
+declare SCRIPTDIR="$(dirname "$0")"
+
+declare DEFAULTSFILE="${SCRIPTDIR}/setup/defaults"
 
 ################################################################################
 ###  Format tags
@@ -82,6 +85,9 @@ function help() {
 	    prints version and qualifiers in localProducts directory format
 	--all
 	    prints all the information in a human-friendly way
+	--defaults , --defaults=DEFAULTFILE
+	    loads default values from the specified file
+	    ('${DEFAULTSFILE}' if not specified)
 	--format=FORMAT , -f FORMAT
 	    use FORMAT directly as format string; the string is printed by the bash
 	    \`printf\` function; the codes for each option are reported in brackets
@@ -340,6 +346,8 @@ function DetectPackageVersion() {
 
 ################################################################################
 declare -i NoMoreOptions=0
+declare -i DefaultsFileRequired=0
+declare DefaultsFile=''
 declare -a Versions
 declare -i nVersions=0
 for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
@@ -359,6 +367,9 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '-U' )                  Format="${Format:+"${Format}\\n"}${LArSoftUPSformat}" ;;
 			( '--localprod' | '-l' )  Format="${Format:+"${Format}\\n"}${LocalProdFormat}" ;;
 			( '--all' | '-a' )        Format="${Format:+"${Format}\\n"}${AllFormat}" ;;
+			
+			( '--defaults' )          DefaultsFile="$DEFAULTSFILE" ;;
+			( '--defaults='* )        DefaultsFile="${Param#--*=}"; DefaultsFileRequired=1 ;;
 			
 			( '--format=' )           Format="${Param#--format=}" ;;
 			( '--format' | '-f' )     let ++iParam; Format="${!iParam}" ;;
@@ -396,9 +407,26 @@ if [[ "${Versions[2]:0:1}" == '!' ]]; then
 	Versions[2]="$Experiment"
 fi
 
-: ${DefaultLArSoftVersion:="${Versions[0]:-"default"}"}
-: ${DefaultLArSoftQualifiers:="${Versions[1]:-"default"}"}
-: ${DefaultExperiment:="${Versions[2]:-"LArSoft"}"}
+if [[ -n "$DefaultsFile" ]]; then
+  if [[ -r "$DefaultsFile" ]]; then
+    DBG "Loading defaults from '${DefaultsFile}'"
+    source "$DefaultsFile"
+  elif isFlagSet DefaultsFileRequired ; then
+    FATAL 2 "Defaults file '${DefaultsFile}' not found."
+  fi
+fi
+
+if [[ -n "${Versions[0]}" ]]; then
+  DefaultLArSoftVersion="${Versions[0]}"
+else
+  : ${DefaultLArSoftVersion:="default"}
+fi
+
+# override the variable if provided on command line;
+# otherwise, use value from default file if provided, or an hard-coded default.
+DefaultLArSoftVersion="${Versions[0]:-"${DefaultLArSoftVersion:-"default"}"}"
+DefaultLArSoftQualifiers="${Versions[1]:-"${DefaultQualifiers:-"default"}"}"
+DefaultExperiment="${Versions[2]:-"${DefaultExperiment:-"LArSoft"}"}"
 
 : ${Format:="$DefaultFormat"}
 
