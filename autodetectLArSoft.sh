@@ -14,6 +14,8 @@ declare SCRIPTDIR="$(dirname "$0")"
 
 declare DEFAULTSFILE="${SCRIPTDIR}/setup/defaults"
 
+declare -r VersionPattern='v[[:digit:]]+_[[:digit:]]+(_[[:digit:]]+)?(_[[:digit:]]+)?$'
+
 ################################################################################
 ###  Format tags
 # all these have to start with the item tag ('%');
@@ -522,7 +524,7 @@ for LocalDir in "$Cwd" "$SetupDir" ; do
 						;;
 				esac
 				# version pattern
-				if [[ "$TestName" =~ v[[:digit:]]+_[[:digit:]]+(_[[:digit:]]+)?$ ]]; then
+				if [[ "$TestName" =~ $VersionPattern ]]; then
 					LArSoftVersionTry="$TestName"
 					let ScoreTry+=2
 					DBGN 1 "  => LArSoft version might be: '${LArSoftVersionTry}' (matches pattern)"
