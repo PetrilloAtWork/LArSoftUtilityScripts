@@ -442,9 +442,9 @@ if isFlagSet DoHelp ; then
 	exit $?
 fi
 
-
+declare -r Cwd="$(pwd)"
 declare SetupDir="$(dirname "$0")"
-[[ "${SetupDir:0:2}" == './' ]] && SetupDir="$(pwd)/${SetupDir:2}"
+[[ "${SetupDir:0:2}" == './' ]] && SetupDir="${Cwd}/${SetupDir:2}"
 DBGN 2 "Setup directory: '${SetupDir}'"
 
 ###
@@ -452,13 +452,14 @@ DBGN 2 "Setup directory: '${SetupDir}'"
 ###
 declare ExperimentBest LArSoftVersionBest LArSoftQualifiersBest
 declare -i ScoreBest=0
-for LocalDir in "$(pwd)" "$SetupDir" ; do
+for LocalDir in "$Cwd" "$SetupDir" ; do
 	DBGN 1 "Extracting information from path: '${LocalDir}'"
 	declare ExperimentTry=""
 	declare LArSoftVersionTry=""
 	declare LArSoftQualifiersTry=""
 	declare -i ScoreTry=0
 	while [[ "$LocalDir" != "/" ]]; do
+		[[ "$LocalDir" == '.' ]] && LocalDir="$Cwd"
 		declare DirName="$(basename "$LocalDir")"
 		declare DirRealName="$(basename "$(grealpath "$LocalDir")")"
 		
