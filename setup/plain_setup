@@ -83,6 +83,16 @@ function _PurgeDuplicatesFromPath() {
 } # _PurgeDuplicatesFromPath()
 
 
+function _DoSource() {
+  # prevents source from inheriting the environment parameters from the caller
+  # environment (which happens only when no argument is specified)
+  local ScriptName="$1"
+  shift
+  # if there are other parameters, source will inherit them from the function:
+  source "$ScriptName"
+} # doSource()
+
+
 function DoPlainSetup() {
 	################################################################################
 	###
@@ -188,7 +198,7 @@ function DoPlainSetup() {
 					;;
 			esac
 			if [[ -n "$setup_base_script" ]] && [[ -r "$setup_base_script" ]]; then
-				source "$setup_base_script" || let ++nErrors
+				_DoSource "$setup_base_script" || let ++nErrors
 				which mrb >& /dev/null || setup mrb || let ++nErrors
 				[[ -z "$MRB_PROJECT" ]] && export MRB_PROJECT=larsoft
 			else
@@ -270,7 +280,7 @@ function DoPlainSetup() {
 			if [[ -r "$setup_script" ]]; then
 				echo "   => setup: '$(grealpath "${setup_script}")'"
 				[[ -n "$nOutput" ]] && let ++nOutput
-				source "$setup_script" >& >(sed -e "s/^/    [${nOutput:-"="}> /")
+				_DoSource "$setup_script" >& >(sed -e "s/^/    [${nOutput:-"="}> /")
 			else
 				echo "No ${setup_script} found. Only official packages will be used!" >&2
 				return 1
@@ -407,7 +417,7 @@ function DoPlainSetup() {
 function DoPlainSetup_Wrapper() {
 	DoPlainSetup "$@"
 	local -i res=$?
-	unset -f DoPlainSetupi{,_Wrapper} _IsInList _SortUPSqualifiers _PurgeDuplicatesFromPath _AddCVMFSUPS
+	unset -f DoPlainSetupi{,_Wrapper} _IsInList _SortUPSqualifiers _DoSource _PurgeDuplicatesFromPath _AddCVMFSUPS
 	return $res
 } # DoPlainSetup_Wrapper()
 
