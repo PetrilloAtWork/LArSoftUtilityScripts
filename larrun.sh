@@ -81,12 +81,18 @@
 #     added `--no-output` option
 # 1.34 (petrillo@slac.stanford.edu)
 #     added detection of file lists by file name (.list, .txt, .filelist)
+# 1.35 (petrillo@slac.stanford.edu)
+#     added `--padding` option
+# 1.36 (petrillo@slac.stanford.edu)
+#     not finding the configuration file elevated from warning to fatal error;
+#     added `--force` option, which currently only ignores when configuration
+#     file is not found
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.34"
+SCRIPTVERSION="1.36"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -174,11 +180,14 @@ function help() {
 	--jobname=JOBNAME
 	    the label for this job (the output directory and log file are named after
 	    it)
+	--padding=N [${PaddingDefault}]
+	    use this many digits (at least) for the job counter
 	--printenv , -E
 	    print on the screen the LARSoft UPS packages set up, and exit
 	--norun , -N
 	    does not actually run (use to debug ${SCRIPTNAME})
-	
+	--force
+	    ignores most errors (e.g. can't find CONFIGFILE)
 	 (configuration options)
 	--nowrap
 	    do not use a FCL wrapper; some of the following features will not be
@@ -303,6 +312,8 @@ function help() {
 	--mmap
 	    enables more general heap profiling (mmap) if the tool supports it (if
 	    not, will complain)
+	
+	(other options)
 	--version
 	    prints the script version
 	EOH
@@ -477,8 +488,7 @@ function FindNextFile() {
 	# Prints the next available log file with the specified base name and suffix
 	local BasePath="$1"
 	local Suffix="$2"
-	local -i IndexPadding="${3:-2}"
-	local -i MaxIndex="${4:-"100"}"
+	local -i IndexPadding="${3:-${PaddingDefault}}"
 	
 	local BaseName="$(basename "$BasePath")"
 	local Dir="$(dirname "$BasePath")"
@@ -499,7 +509,7 @@ function FindNextLogFile() {
 	# The log path is in the form:
 	# logs/ConfigBaseName_Date-##.fcl
 	local ConfigBaseName="${1%".fcl"}"
-	local -i IndexPadding="${2:-2}"
+	local -i IndexPadding="${2:-${PaddingDefault}}"
 	
 	FindNextFile "logs/${ConfigBaseName}/${DATETAG}" '.log' "$IndexPadding" $MAXLOGS
 } # FindNextLogFile()
@@ -1218,7 +1228,7 @@ function TailInterruptHandler() {
 ################################################################################
 declare JobBaseName
 
-declare -i DoHelp=0 DoVersion=0 OnlyPrintEnvironment=0 FollowLog=0 NoLogDump=0 UseConfigWrapper=1
+declare -i DoHelp=0 DoVersion=0 OnlyPrintEnvironment=0 FollowLog=0 NoLogDump=0 UseConfigWrapper=1 Force=0
 
 declare -i NoMoreOptions=0
 declare ConfigFile
@@ -1236,6 +1246,7 @@ declare -a InputCommands
 declare -i NoOutput=0
 declare -a DebugModules
 declare -i OneStringCommand=0
+declare -i PaddingDefault=2
 declare DumpConfigMode="Yes"
 for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 	Param="${!iParam}"
@@ -1248,6 +1259,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '-d' )                       let ++iParam ; DEBUG="${!iParam}" ;;
 			( '--printenv' | '-E' )        OnlyPrintEnvironment=1  ;;
 			( '--norun' | '-N' )           DontRun=1  ;;
+			( '--force' )                  Force=1  ;;
 			
 			### behaviour options
 			( '--foreground' | '--fg' )    NOBG=1    ;;
@@ -1265,6 +1277,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 		#	( '--source='* | '--src='* )   SourceFiles=( "${SourceFiles[@]}" "${Param#--*=}" ) ;;
 		#	( '-s' )                       let ++iParam ; SourceFiles=( "${SourceFiles[@]}" "${!iParam}" ) ;;
 			( '--jobname='* )              JobBaseName="${Param#--*=}" ;;
+			( '--padding='* )              PaddingDefault="${Param#--*=}" ;;
 			( '--nowrap' )                 UseConfigWrapper=0 ;;
 			( '--precfg='* )               PrependConfigFiles=( "${PrependConfigFiles[@]}" "${Param#--*=}" ) ;;
 			( '--include='* )              AppendConfigFiles=( "${AppendConfigFiles[@]}" "${Param#--*=}" ) ;;
@@ -1486,7 +1499,13 @@ declare ConfigName="$(basename "${ConfigFile%.fcl}")"
 DBGN 2 "FHICL_FILE_PATH=${FHICL_FILE_PATH}"
 declare UserConfigPath="$ConfigFile"
 declare FullConfigPath="$(FindFCLfile "$UserConfigPath")"
-[[ -z "$FullConfigPath" ]] && WARN "Could not find the configuration file '${UserConfigPath}'"
+if [[ -z "$FullConfigPath" ]]; then
+	if isFlagSet Force ; then
+		WARN "Could not find the configuration file '${UserConfigPath}'. Trying anyway."
+	else
+		FATAL 2 "Could not find the configuration file '${UserConfigPath}' (use \`--force\` to attempt running anyway)"
+	fi
+fi
 
 declare LogPath
 LogPath="$(FindNextLogFile "$JobBaseName")"

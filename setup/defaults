@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+: ${DefaultLArSoftVersion:=''}
+: ${DefaultOptimQualifier:='prof'}
+: ${DefaultOptionQualifiers:='e19'}
+: ${DefaultQualifiers:="${DefaultOptionQualifiers:+"${DefaultOptionQualifiers}:"}${DefaultOptimQualifier}"}
+
