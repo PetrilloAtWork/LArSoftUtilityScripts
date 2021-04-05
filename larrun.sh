@@ -87,12 +87,17 @@
 #     not finding the configuration file elevated from warning to fatal error;
 #     added `--force` option, which currently only ignores when configuration
 #     file is not found
+# 1.37 (petrillo@slac.stanford.edu)
+#     aborts if the executable (usually `lar`, unless some profiling is
+#     requested) is not found; `--force` option overrides this feature
+# 1.38 (petrillo@slac.stanford.edu)
+#     prints a list of input files in the log header; `grep ^Input: ` picks them
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.36"
+SCRIPTVERSION="1.38"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -600,6 +605,12 @@ function WritePostProcessScript() {
 	DBG "Post-process script '${ScriptPath}' written."
 	return 0
 } # WritePostProcessScript()
+
+
+function isSourceFileList() {
+  local Path="$1"
+  [[ ! "$Path" =~ .root$ ]]
+} # isSourceFileList()
 
 
 function IgProfReport() {
@@ -1785,11 +1796,12 @@ fi
 # expand lar parameters
 #
 declare -a SourceParams
-for SourceFile in "${SourceFiles[@]}" ; do
-	if [[ "$SourceFile" =~ .root$ ]]; then
-		SourceParams+=( '-s' "$SourceFile" )
+declare -i nSources="${#SourceFiles[@]}"
+for SourceEntry in "${SourceFiles[@]}" ; do
+	if isSourceFileList "$SourceEntry" ]]; then
+		SourceParams+=( '-s' "$SourceEntry" )
 	else
-		SourceParams+=( '-S' "$SourceFile" )
+		SourceParams+=( '-S' "$SourceEntry" )
   fi
 done
 
@@ -1811,10 +1823,18 @@ WritePostProcessScript "$(basename "$PostProcessScriptPath")" || PostProcessScri
 #
 LarExecutable="$(which lar)"
 declare -a BaseCommand
-BaseCommand=( "${LarExecutable:-'lar'}" -c "$WrappedConfigPath" "${SourceParams[@]}" "${LArParams[@]}" )
+BaseCommand=( "${LarExecutable:-lar}" -c "$WrappedConfigPath" "${SourceParams[@]}" "${LArParams[@]}" )
 
 declare -a Command
 SetupCommand "${BaseCommand[@]}"
+
+if ! which "${Command[0]}" >& /dev/null ; then
+	if isFlagSet Force ; then
+		WARN "Could not find the executable '${Command[0]}'. Trying anyway."
+	else
+		FATAL 2 "Could not find the executable '${Command[0]}' (use \`--force\` to attempt running anyway)"
+	fi
+fi
 
 # if user interrupts, we want to terminate our children...
 trap InterruptHandler SIGINT
@@ -1828,6 +1848,19 @@ cat <<EOM > "$AbsoluteLogPath"
 Script:       ${SCRIPTNAME} version ${SCRIPTVERSION:-"unknown"}
 Job name:    '${JobName}'
 Base config: '${FullConfigPath}'
+EOM
+for (( iSourceEntry=0 ; iSourceEntry < $nSources ; ++iSourceEntry )); do
+	SourceEntry="${SourceFiles[iSourceEntry]}"
+	echo -n "Input:       "
+	[[ "$nSources" -gt 1 ]] && echo -n " [$((iSourceEntry + 1))/${nSources}]"
+	if isSourceFileList "$SourceEntry" ]]; then
+		echo -n " file list"
+	else
+		echo -n " file"
+	fi
+	echo " '${SourceEntry}'"
+done >> "$AbsoluteLogPath"
+cat <<EOM >> "$AbsoluteLogPath"
 Host:         $(hostname)
 Directory:    $(pwd)
 Executing:    ${Command[@]}
