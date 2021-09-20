@@ -116,7 +116,7 @@ function DetectCodeBaseDir() {
 	if [[ -n "$SubDir" ]]; then
 		# maybe there is no special directory for the code, lariatsoft-like:
 		if [[ -d "${BaseDir}/${SubDir}" ]]; then
-			DBNG 2 "No base code subdirectory => ''"
+			DBGN 2 "No base code subdirectory => ''"
 			echo ""
 			return 0
 		fi
