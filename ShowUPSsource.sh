@@ -80,7 +80,8 @@ function FindMatches() {
 
 function GetPackageDir() {
 	local Package="$1"
-	local PackageDirVar="${Package^^}_DIR"
+	local PackageDirVar="${Package//-/_}"
+	PackageDirVar="${PackageDirVar^^}_DIR"
 	local PackageDir="${!PackageDirVar}"
 	echo "$PackageDir"
 	[[ -n "$PackageDir" ]]
