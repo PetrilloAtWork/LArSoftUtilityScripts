@@ -2,6 +2,6 @@
 
 : ${DefaultLArSoftVersion:=''}
 : ${DefaultOptimQualifier:='prof'}
-: ${DefaultOptionQualifiers:='e19'}
+: ${DefaultOptionQualifiers:='e20'}
 : ${DefaultQualifiers:="${DefaultOptionQualifiers:+"${DefaultOptionQualifiers}:"}${DefaultOptimQualifier}"}
 
