@@ -92,12 +92,20 @@
 #     requested) is not found; `--force` option overrides this feature
 # 1.38 (petrillo@slac.stanford.edu)
 #     prints a list of input files in the log header; `grep ^Input: ` picks them
+# 1.39 (petrillo@slac.stanford.edu)
+#     `--force` will remove astray symlinks to log files
+# 1.40 (petrillo@slac.stanford.edu)
+#     ROOT and TFile output option arguments set into the sandbox
+# 1.41 (petrillo@slac.stanford.edu)
+#     added support for input, output and config parameters with equal sign
+#     (`--param=value`);
+#     added support for output labels in output parameters
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.38"
+SCRIPTVERSION="1.41"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -448,7 +456,7 @@ function isRunning() {
 
 function isAbsolute() {
 	local Path="$1"
-	[[ "${Path:0:1}" == '/' ]]
+	[[ "$Path" =~ [^:]+:// ]] || [[ "${Path:0:1}" == '/' ]]
 } # isAbsolute()
 
 
@@ -1133,6 +1141,52 @@ function ScheduleInputCommands() {
 } # ScheduleInputCommands()
 
 
+function ExtractParameterPrefix() {
+	#
+	# Parameters on art command line may merge parameter name and argument as in:
+	# `--output=BNB_output_file.root`
+	# This function prints the parameter name (with hyphens and equal sign) if
+	# any, and returns failure (and prints nothing) if no parameter is found.
+	# 
+	# This function uses Bash regex and does not save/restore its existing values.
+	#
+	
+	local Param="$1"
+	
+	[[ "$Param" =~ (--[^=]+=).* ]] || return 1
+	
+	echo "${BASH_REMATCH[1]}"
+	
+	return 0
+} # ExtractParameterPrefix()
+
+
+function ExtractOutputLabel() {
+	#
+	# Output specification on art command line may include an output label as in:
+	# `--output outBNB:BNB_output_file.root`
+	# This function prints the output label (with colon) if any, and returns
+	# failure (and prints nothing) if no output label is found.
+	# Note that paths in the form `protocol://` are not considered output labels,
+	# while `outBNB:/absolute/path/to/file.root` is: the difference is the double
+	# slash (`//`).
+	# 
+	# This function uses Bash regex and does not save/restore its existing values.
+	#
+	
+	local OutputSpec="$1"
+	
+	# remove protocol + string
+	OutputSpec="${OutputSpec%://*}" # note that the colon is removed too!
+	
+	[[ "$OutputSpec" =~ ([^:]+:).* ]] || return 1
+	
+	echo "${BASH_REMATCH[1]}"
+	
+	return 0
+} # ExtractOutputLabel()
+
+
 function ConfigurationReseeder() {
 	#
 	# The purpose of this function is to add a sequence of statements at the end
@@ -1483,17 +1537,26 @@ declare -a LArParams
 for (( iParam = 0; iParam < $nParams ; ++iParam )); do
 	Param="${Params[iParam]}"
 	case "$Param" in
-		( '-s' | '-S' | '-T' | '-o' \
-			| '--source' | '--source-list' | '--TFileName' | '--output' \
-			)
-			let ++iParam # skip the file name
-			LArParams=( "${LArParams[@]}" "$Param" "${Params[iParam]}" )
-			PathParams=( "${PathParams[@]}" "$((${#LArParams[@]} - 1))" )
+		( '-s' | '-S' | '--source' | '--source-list' | '--source='* | '--source-list='* )
+			# if the parameter is in the form --param=value, Param and Params[iParam]
+			# are the same (`--param=value`); if it is in the form `--param value` or
+			# `-p value`, Param is the first part (`-p`) and Params[iParam] is the
+			# second one (`value`); the following manipulation will always produce
+			# two parameters and in the former case it loses the equal sign.
+			[[ "${Param#--*=}" == "$Param" ]] && let ++iParam # skip the file name
+			LArParams+=( "${Param%=*}" "${Params[iParam]#--*=}" )
+			PathParams+=( "$((${#LArParams[@]} - 1))" )
 			;;
-		( '-c' | '--config' )
-			let ++iParam # skip the file name
-			[[ -n "$ConfigFile" ]] && [[ "$ConfigFile" != "${Params[iParam]}" ]] && FATAL 1 "Configuration file specified more than once ('${ConfigFile}', then '${Params[iParam]}')"
-			ConfigFile="${Params[iParam]}"
+		( '-T' | '-o' | '--TFileName' | '--output' | '--TFileName='* | '--output='* )
+			[[ "${Param#--*=}" == "$Param" ]] && let ++iParam # skip the file name
+			# see explanation on `--source` above
+			LArParams+=( "${Param%=*}" "${Params[iParam]#--*=}" )
+			OutputParams+=( "$((${#LArParams[@]} - 1))" )
+			;;
+		( '-c' | '--config' | '--config='* )
+			[[ "${Param#--*=}" == "$Param" ]] && let ++iParam # skip the file name
+			[[ -n "$ConfigFile" ]] && [[ "$ConfigFile" != "${Params[iParam]#--*=}" ]] && FATAL 1 "Configuration file specified more than once ('${ConfigFile}', then '${Params[iParam]#--*=}')"
+			ConfigFile="${Params[iParam]#--*=}"
 			;;
 		( *.root | *.txt | *.list | *.filelist )
 			SourceFiles=( "${SourceFiles[@]}" "$Param" )
@@ -1544,6 +1607,14 @@ if [[ -e "$LogPath" ]]; then
 	else
 		FATAL 1 "Log file '${LogPath}' already exists."
 	fi
+fi
+if [[ -h "$LogPath" ]] && [[ ! -e "$LogPath" ]]; then
+  if isFlagSet Force ; then
+    rm "$LogPath"
+    WARN "Existing broken link to the future log file, '${LogPath}', was forcibly removed."
+  else
+    WARN "Existing broken link to the future log file, '${LogPath}' is on the way. Use \`--force\` option to automatically remove it."
+  fi
 fi
 touch "$LogPath" || FATAL 2 "Can't create the log file '${LogPath}'."
 
@@ -1606,14 +1677,21 @@ if isFlagSet SANDBOX ; then
 	# turn all the path parameters to absolute
 	for iParam in "${PathParams[@]}" ; do
 		Param="${LArParams[iParam]}"
-		LArParams[iParam]="$(MakeAbsolute "$Param")"
+		ParamName="$(ExtractParameterPrefix "$Param")" # includes trailing colon
+		FilePath="${Param#${ParamName}}"
+		LArParams[iParam]="${ParamName}$(MakeAbsolute "$Param")"
 	done
 
 	# turn all the output path parameters to absolute and in the sandbox
 	for iParam in "${OutputParams[@]}" ; do
 		Param="${LArParams[iParam]}"
-		isAbsolute "$Param" || Param="${WorkDir}/${Param}"
-		LArParams[iParam]="$(MakeAbsolute "$Param")"
+		ParamName="$(ExtractParameterPrefix "$Param")" # includes trailing colon
+		Param="${Param#${ParamName}}"
+		OutputLabel="$(ExtractOutputLabel "$Param")" # includes trailing colon
+		[[ $? == 0 ]] && DBGN 2 "Output specification '${Param}' has output label '${OutputLabel}'"
+		FilePath="${Param#${OutputLabel}}"
+		isAbsolute "$FilePath" || [[ "${FilePath:0:2}" == './' ]] || FilePath="${WorkDir}/${FilePath}"
+		LArParams[iParam]="${ParamName}${OutputLabel}$(MakeAbsolute "$FilePath")"
 	done
 	
 fi
@@ -1799,9 +1877,9 @@ declare -a SourceParams
 declare -i nSources="${#SourceFiles[@]}"
 for SourceEntry in "${SourceFiles[@]}" ; do
 	if isSourceFileList "$SourceEntry" ]]; then
-		SourceParams+=( '-s' "$SourceEntry" )
-	else
 		SourceParams+=( '-S' "$SourceEntry" )
+	else
+		SourceParams+=( '-s' "$SourceEntry" )
   fi
 done
 
