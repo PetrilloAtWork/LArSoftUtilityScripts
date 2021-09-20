@@ -4,9 +4,6 @@
 # Run without parameters for usage instructions.
 #
 
-declare local_create_area_DefaultVersion="${LARCORE_VERSION:-"develop"}"
-declare local_create_area_DefaultQual="${MRB_QUAL:-"e19:debug"}"
-
 function IsInList() {
 	# IsInList Key ListItem [...]
 	
@@ -73,201 +70,170 @@ function CheckSetup() {
 } # CheckSetup()
 
 
-declare local_create_area_scriptdir="$(dirname "$BASH_SOURCE")"
+# ------------------------------------------------------------------------------
+function DoCreateArea() {
 
-if [[ $# == 0 ]]; then
-	cat <<-EOH
-	Creates and sets up a new LArSoft working area.
-	
-	Usage:  source $(basename "$BASH_SOURCE") LArSoftVersion LArSoftQualifiers NewAreaPath Experiment
-	
-	All parameters are optional, but they need to be specified if a following one
-	is also specified.
-	If LArSoftVersion is not specified or empty, it defaults to '${local_create_area_DefaultVersion}'.
-	If LArSoftQualifiers is not specified or empty, it defaults to '${local_create_area_DefaultQual}'.
-	If NewAreaPath is not specified or empty, it defaults to LArSoftVersion/LArSoftQualifiers.
-	The parameter Experiment is autodetected out of the current path if it is not
-	specified or if it is "auto".
-	
-	EOH
-	
-	unset local_create_area_scriptdir local_create_area_newarea
-	[[ "$BASH_SOURCE" != "$0" ]] && return
-	exit
-fi
+  local SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
+  
+  local DefaultVersion="${LARSOFT_VERSION:-develop}"
 
-###
-### parameters parsing
-###
-declare local_create_area_setup_version="${1:-"$local_create_area_DefaultVersion"}"
-declare local_create_area_setup_qual="${2:-"$local_create_area_DefaultQual"}"
+  local Version Qualifiers NewAreaPath Experiment
+  
+  # autodetection picks default values from `${SCRIPTDIR}/setup/defaults`;
+  # it should really really work
+  local autodetection_script="$(which 'autodetectLArSoft.sh' 2> /dev/null)"
+  [[ -r "$autodetection_script" ]] || autodetection_script="${SCRIPTDIR}/autodetectLArSoft.sh"
+  if [[ -r "$autodetection_script" ]] ; then
+    local -a autodetection=( $("$SHELL" "$autodetection_script" --defaults --loose -v -q -e -L -p "$DefaultVersion" ) )
+    Version="${autodetection[0]}"
+    Qualifiers="${autodetection[1]}"
+    Experiment="${autodetection[2]}"
+  else
+    Version="$DefaultVersion"
+    Qualifiers="${MRB_QUALS:-e20:prof}"
+    Experiment="LArSoft"
+  fi
+  NewAreaPath="${Version}/${Qualifiers//:/_}"
+  
+  if [[ $# == 0 ]]; then
+    cat <<-EOH
+Creates and sets up a new LArSoft working area.
 
-declare local_create_area_newarea="$3"
+Usage:  source $(basename "$BASH_SOURCE") LArSoftVersion LArSoftQualifiers NewAreaPath Experiment
 
-declare local_create_area_experiment
-case "$(tr '[:upper:]' '[:lower:]' <<< "$4")" in
-	( 'auto' | 'autodetect' | '' )
-		for local_create_area_dir in "$(pwd)" "$local_create_area_scriptdir" ; do
-			while [[ "$local_create_area_dir" != "/" ]]; do
-				
-				case "$(basename "$local_create_area_dir" | tr '[:lower:]' '[:upper:]')" in
-					( 'LBNE' | 'DUNE' )
-						local_create_area_experiment='DUNE'
-						break 2
-						;;
-					( 'LARIAT' )
-						local_create_area_experiment='LArIAT'
-						break 2
-						;;
-					( 'LAR1ND' | 'SBND' )
-						local_create_area_experiment='SBND'
-						break 2
-						;;
-					( 'UBOONE' | 'MICROBOONE' )
-						local_create_area_experiment='MicroBooNE'
-						break 2
-						;;
-				esac
-				local_create_area_dir="$(dirname "$local_create_area_dir")"
-			done
-		done
-		unset local_create_area_dir
-		
-		if [[ -z "$local_create_area_experiment" ]]; then
-			if [[ -d '/dune' ]] ||  [[ -d '/lbne' ]]; then
-				local_create_area_experiment="DUNE"
-			elif [[ -d '/sbnd' ]] ||  [[ -d '/lar1nd' ]]; then
-				local_create_area_experiment="SBND"
-			elif [[ -d '/lariat' ]]; then
-				local_create_area_experiment="LArIAT"
-			elif [[ -d "/uboone" ]]; then
-				local_create_area_experiment="MicroBooNE"
-			fi
-		fi
-		;;
-	( 'lbne' | 'dune' )
-		local_create_area_experiment="DUNE"
-		;;
-	( 'lar1nd' | 'sbnd' )
-		local_create_area_experiment="SBND"
-		;;
-	( 'lariat' )
-		local_create_area_experiment="LArIAT"
-		;;
-	( 'argoneut' )
-		local_create_area_experiment="ArgoNeuT"
-		;;
-	( 'uboone' | 'microboone' )
-		local_create_area_experiment="MicroBooNE"
-		;;
-	( 'larsoftobj' )
-		local_create_area_experiment="LArSoftObj"
-		;;
-esac
+All parameters are optional, but they need to be specified if a following one
+is also specified.
+If LArSoftVersion is not specified or empty, it is autodetected (now: '${Version}').
+If LArSoftQualifiers is not specified or empty, it is autodetected (now: '${Qualifiers}'.
+If NewAreaPath is not specified or empty, it defaults to LArSoftVersion/LArSoftQualifiers.
+The parameter Experiment is autodetected out of the current path if it is not
+specified or if it is "auto".
 
-local_create_area_setup_qual="$(SortUPSqualifiers "${local_create_area_setup_qual//_/:}")"
-unset -f SortUPSqualifiers IsInList
+EOH
+    
+    return
+  fi
 
-if [[ -z "$local_create_area_newarea" ]] && [[ -n "$local_create_area_setup_version" ]]; then
-	local_create_area_newarea="${local_create_area_setup_version}/${local_create_area_setup_qual//:/_}"
-fi
+  ###
+  ### parameters parsing
+  ###
+  [[ -n "$1" ]] && Version="$1"
+  [[ -n "$2" ]] && Qualifiers="$2"
+  [[ -n "$3" ]] && NewAreaPath="$3"
+  [[ -n "$4" ]] && Experiment="$4"
 
-if [[ "$BASH_SOURCE" == "$0" ]]; then
-	cat <<-EOM
-	Experiment:      ${local_create_area_experiment:-"generic"}
-	LArSoft version: ${local_create_area_setup_version} (${local_create_area_setup_qual})
-	Location:       '${local_create_area_newarea}'
-	This script needs to be sourced:
-	source $0 $@
-	EOM
-	CheckSetup
-	[[ "$BASH_SOURCE" != "$0" ]] && return 1
-	exit 1
-fi
+  Qualifiers="$(SortUPSqualifiers "${Qualifiers//_/:}")"
+  unset -f SortUPSqualifiers IsInList
 
-###
-### Here we go: we do it!!
-###
+  if [[ -z "$NewAreaPath" ]] && [[ -n "$Version" ]]; then
+    NewAreaPath="${Version}/${Qualifiers//:/_}"
+  fi
 
-###
-### environment checks
-###
-if [[ -z "$local_create_area_setup_version" ]]; then
-	echo "You really need to specify a LArSoft version." >&2
-	unset local_create_area_scriptdir local_create_area_newarea local_create_area_experiment local_create_area_setup_version local_create_area_setup_qual
-	return 1
-fi
+  if [[ "$BASH_SOURCE" == "$0" ]]; then
+    cat <<-EOM
+Experiment:      ${Experiment:-"generic"}
+LArSoft version: ${Version} (${Qualifiers})
+Location:       '${NewAreaPath}'
+This script needs to be sourced:
+source $0 $@
+EOM
+    CheckSetup
+    return 1
+  fi
 
-# check that UPS is set up
-CheckSetup || return $?
+  ###
+  ### Here we go: we do it!!
+  ###
 
-echo "Creating working area: '${local_create_area_newarea}'"
+  ###
+  ### environment checks
+  ###
+  if [[ -z "$Version" ]]; then
+    echo "You really need to specify a LArSoft version." >&2
+    unset SCRIPTDIR NewAreaPath Experiment Version Qualifiers
+    return 1
+  fi
+
+  # check that UPS is set up
+  CheckSetup || return $?
+
+  echo "Creating working area: '${NewAreaPath}'"
 
 
-###
-### set up
-###
-source "${local_create_area_scriptdir}/setup/setup" "base" "$local_create_area_setup_version" "$local_create_area_setup_qual"
+  ###
+  ### set up
+  ###
+  source "${SCRIPTDIR}/setup/setup" "base" "$Version" "$Qualifiers"
 
 
-###
-### creation of the new area
-###
-if [[ -d "$local_create_area_newarea" ]]; then
-	echo "The working area '${local_create_area_newarea}' already exists." >&2
-	cd "$local_create_area_newarea"
-	return 1
-else
-	mkdir -p "$local_create_area_newarea"
-	if ! cd "$local_create_area_newarea" ; then
-		echo "Error creating the new area in '${local_create_area_newarea}'." >&2
-		return 1
-	fi
-	
-	declare local_create_area_test_script="./ExecTest-$$.sh"
-	cat <<-EOS > "$local_create_area_test_script"
-	#!/usr/bin/env bash
-	echo "success!"
-	EOS
-	chmod a+x "$local_create_area_test_script"
-	echo -n "Testing exec... "
-	"$local_create_area_test_script"
-	if [[ $? != 0 ]]; then
-		echo "The area '${local_create_area_newarea}' seems not suitable for compilation." >&2
-		return 1
-	fi
-	rm "$local_create_area_test_script"
-	
-	echo "Creating the new working area '${local_create_area_newarea}'"
-	mrb newDev -v "$local_create_area_setup_version" -q "$local_create_area_setup_qual"
-	
-	if [[ -r "${local_create_area_scriptdir}/setup/devel" ]]; then
-		echo "Linking the developement setup script (and sourcing it!)"
-		rm -f 'setup'
-		ln -s "${local_create_area_scriptdir}/setup/devel" 'setup'
-		source './setup'
-	else
-		echo "Can't find developement setup script ('${local_create_area_scriptdir}/setup/devel'): setup not linked." >&2
-	fi
-	
-	: ${MRB_INSTALL:="${local_create_area_newarea}/localProducts_${MRB_PROJECT}_$(autodetectLArSoft.sh --localprod)"}
-	
-	if [[ -d "$MRB_INSTALL" ]]; then
-		echo "Creating link 'localProducts' to MRB_INSTALL directory"
-		rm -f 'localProducts'
-		ln -s "$MRB_INSTALL" 'localProducts'
-	else
-		echo "Expected local products directory '${MRB_INSTALL}' not found. You'll need to complete setup on your own." >&2
-		unset MRB_INSTALL
-	fi
-fi
+  ###
+  ### creation of the new area
+  ###
+  if [[ -d "$NewAreaPath" ]]; then
+    echo "The working area '${NewAreaPath}' already exists." >&2
+    cd "$NewAreaPath"
+    return 1
+  else
+    mkdir -p "$NewAreaPath"
+    if ! cd "$NewAreaPath" ; then
+      echo "Error creating the new area in '${NewAreaPath}'." >&2
+      return 1
+    fi
+    
+    local TestScript="./ExecTest-$$.sh"
+    cat <<-EOS > "$TestScript"
+#!/usr/bin/env bash
+echo "success!"
+EOS
+    chmod a+x "$TestScript"
+    echo -n "Testing exec... "
+    "$TestScript"
+    if [[ $? != 0 ]]; then
+      echo "The area '${NewAreaPath}' seems not suitable for compilation." >&2
+      return 1
+    fi
+    rm "$TestScript"
+    
+    echo "Creating the new working area '${NewAreaPath}'"
+    mrb newDev -v "$Version" -q "$Qualifiers"
+    
+    if [[ -r "${SCRIPTDIR}/setup/devel" ]]; then
+      echo "Linking the developement setup script (and sourcing it!)"
+      rm -f 'setup'
+      ln -s "${SCRIPTDIR}/setup/devel" 'setup'
+      source './setup'
+    else
+      echo "Can't find developement setup script ('${SCRIPTDIR}/setup/devel'): setup not linked." >&2
+    fi
+    
+    : ${MRB_INSTALL:="${NewAreaPath}/localProducts_${MRB_PROJECT}_$(autodetectLArSoft.sh --localprod)"}
+    
+    if [[ -d "$MRB_INSTALL" ]]; then
+      echo "Creating link 'localProducts' to MRB_INSTALL directory"
+      rm -f 'localProducts'
+      ln -s "$MRB_INSTALL" 'localProducts'
+    else
+      echo "Expected local products directory '${MRB_INSTALL}' not found. You'll need to complete setup on your own." >&2
+      unset MRB_INSTALL
+    fi
+  fi
 
-mkdir -p "logs" "job"
-cd "srcs"
+  mkdir -p "logs" "job"
+  cd "srcs"
 
-###
-### clean up
-###
-unset local_create_area_scriptdir local_create_area_newarea local_create_area_experiment local_create_area_setup_version local_create_area_setup_qual
+  ###
+} # DoCreateArea()
 
-###
+
+function CreateAreaWrapper() {
+  
+  DoCreateArea "$@"
+  local res=$?
+  
+  unset CreateAreaWrapper DoCreateArea
+  
+  return $res
+} # CreateAreaWrapper()
+
+
+CreateAreaWrapper "$@"
