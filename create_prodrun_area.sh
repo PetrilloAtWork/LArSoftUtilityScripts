@@ -23,9 +23,7 @@ VERSION="1.5"
 
 : ${BASEDIR:="."}
 
-declare -a StandardQualifiers
-StandardQualifiers=(       'e19:debug'  'e19:prof'   )
-StandardQualifierAliases=( 'debug' 'prof' )
+declare -a StandardQualifierAliases=( 'debug' 'prof' )
 
 function help() {
 	cat <<-EOH
@@ -282,8 +280,29 @@ if isFlagSet DoHelp || [[ $nVersions == 0 ]] ; then
 	exit $?
 fi
 
+# autodetection picks default values from `${SCRIPTDIR}/setup/defaults`;
+declare autodetection_script="$(which 'autodetectLArSoft.sh' 2> /dev/null)"
+[[ -r "$autodetection_script" ]] || autodetection_script="${SCRIPTDIR}/autodetectLArSoft.sh"
+if [[ -r "$autodetection_script" ]] ; then
+  declare -a autodetection=( $("$SHELL" "$autodetection_script" --defaults --loose -v -q -e -L -p "$DefaultVersion" ) )
+  DefaultVersion="${autodetection[0]}"
+  DefaultQualifiers="${autodetection[1]}"
+  Experiment="${autodetection[2]}"
+else
+  DefaultVersion="$DefaultVersion"
+  DefaultQualifiers="${MRB_QUALS:-e20:prof}"
+  Experiment="LArSoft"
+fi
+DefaultOptionQualifiers="$DefaultQualifiers"
+for OptimQual in "${StandardQualifierAliases[@]}" ; do
+  DefaultOptionQualifiers="${DefaultOptionQualifiers/:${OptimQual}:/:}"
+  DefaultOptionQualifiers="${DefaultOptionQualifiers%:${OptimQual}}"
+  DefaultOptionQualifiers="${DefaultOptionQualifiers#${OptimQual}:}"
+done
+declare -ar StandardQualifiers=( "${StandardQualifierAliases[@]/#/${DefaultOptionQualifiers}:}" )
+
 declare -i nErrors=0
-for VersionSpec in "${Versions[@]}" ; do
+for VersionSpec in "${Versions[@]:-${DefaultVersion}}" ; do
 	CreateProductionAreas "$BASEDIR" "$VersionSpec" $MakeItCurrent || let ++nErrors
 	# only the first version is made current
 	MakeItCurrent=0
