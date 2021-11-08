@@ -100,12 +100,14 @@
 #     added support for input, output and config parameters with equal sign
 #     (`--param=value`);
 #     added support for output labels in output parameters
+# 1.42 (petrillo@slac.stanford.edu)
+#     added support for injecting lines at the beginning of configuration
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.41"
+SCRIPTVERSION="1.42"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -227,17 +229,20 @@ function help() {
 	    includes FILE in the FCL: the first option includes FILE before the main
 	    FCL file, the second after it; multiple files can be specified by using
 	    these options multiple times
-	--inject=FCLdirective
-	    appends the specified FCL line at the end of the FCL file (also after the
-	    inclusion of the optional configuration by --include option); multiple
-	    directives can be specified by using this options multiple times;
+	--inject=[<>]FCLdirective
+	    injects the specified FCL line in the configuration:
+	    if the prefix \`>\` is specified (default), the directive is appended at
+	    the end of the FCL file (also after the inclusion of the optional
+	    configuration by --include option), while if prefix \`<\` is specified,
+	    the directive is added before including the main configuration file;
+	    multiple directives can be specified by using this options multiple times;
 	    do not abuse it: it makes harder to rerun jobs!
-	--inject-service=ServiceName:FCLdirective
-	--inject-source=FCLdirective
-	--inject-producer=ModuleLabel.FCLdirective
-	--inject-filter=ModuleLabel.FCLdirective
-	--inject-analyzer=ModuleLabel.FCLdirective
-	--inject-output=ModuleLabel.FCLdirective
+	--inject-service=[<>]ServiceName.FCLdirective
+	--inject-source=[<>]FCLdirective
+	--inject-producer=[<>]ModuleLabel.FCLdirective
+	--inject-filter=[<>]ModuleLabel.FCLdirective
+	--inject-analyzer=[<>]ModuleLabel.FCLdirective
+	--inject-output=[<>]OutputLabel.FCLdirective
 	    adds the specified configuration line into the configuration of the
 	    specified service or module (see \`--inject\` for details).
 	    Example: \`--inject-producer="generator.fluxType: parallel" is equivalent
@@ -1141,6 +1146,40 @@ function ScheduleInputCommands() {
 } # ScheduleInputCommands()
 
 
+
+function configLineToBeInjected() {
+  local ConfigLine="$1"
+  
+  DBGN 1 "Processing injected config line: '${ConfigLine}'"
+  local ConfigLinePrefix=''
+  if [[ "${ConfigLine:0:1}" == "$InjectDestMarker" ]]; then # check for internal marker
+    local ConfigLineTag="${ConfigLine%%=*}"
+    ConfigLineTag="${ConfigLineTag:1}"
+    ConfigLine="${ConfigLine#*=}"
+    DBGN 2 " => it's special, of type '${ConfigLineTag}' (\"${ConfigLine}\")"
+    case "$ConfigLineTag" in
+      ( 'service' ) # in `services`
+        ConfigLinePrefix="${ConfigLineTag}s."
+        ;;
+      ( 'producer' | 'analyzer' | 'filter' ) # in `physics.*`
+        ConfigLinePrefix="physics.${ConfigLineTag}s."
+        ;;
+      ( 'source' ) # in `source`
+        ConfigLinePrefix="${ConfigLineTag}."
+        ;;
+      ( 'output' ) # in `outputs`
+        ConfigLinePrefix="${ConfigLineTag}s."
+        ;;
+      ( * )
+        FATAL 1 "Type '${ConfigLineTag}' of configuration line to be injected is not known."
+        ;;
+    esac
+  fi
+  echo "${ConfigLinePrefix}${ConfigLine}"
+  
+} # configLineToBeInjected()
+
+
 function ExtractParameterPrefix() {
 	#
 	# Parameters on art command line may merge parameter name and argument as in:
@@ -1290,8 +1329,53 @@ function TailInterruptHandler() {
 } # TailInterruptHandler()
 
 
+function scheduleConfigLineInjection() {
+  #
+  # Processes the arguments like `--inject=*` and `--inject-<key>=*`.
+  # It decorates the values according to <key>, and dispatches to prepend or
+  # append list according to the optional prefix.
+  #
+  local Param="$1"
+  
+  local Value="${Param#--*=}"
+  local InsertionLocation
+  case "${Value:0:1}" in
+    ( '<' )
+      Value="${Value#<}"
+      InsertionLocation='PrependConfigLines'
+      ;;
+    ( '>' )
+      Value="${Value#>}"
+      ;&
+    ( * )
+      InsertionLocation='AppendConfigLines'
+      ;;
+  esac
+  
+  if [[ "$Param" =~ ^--inject-([^=]+)= ]]; then
+    Value="${InjectDestMarker}${BASH_REMATCH[1]}=${Value}"
+  fi
+  
+  case "$InsertionLocation" in
+    ( 'PrependConfigLines' )
+      PrependConfigLines+=( "$Value" )
+      DBGN 3 "Scheduled to be prepended to configuration (#${#PrependConfigLines[@]}): '${Value}'"
+      ;;
+    ( 'AppendConfigLines' )
+      AppendConfigLines+=( "$Value" )
+      DBGN 3 "Scheduled to be appended to configuration (#${#AppendConfigLines[@]}): '${Value}'"
+      ;;
+    ( * )
+      FATAL 1 "Logic error: unexpected insertion location '${InsertionLocation}'"
+  esac
+  
+} # scheduleConfigLineInjection
+
+
 ################################################################################
 declare JobBaseName
+
+declare -r InjectDestMarker='$'
 
 declare -i DoHelp=0 DoVersion=0 OnlyPrintEnvironment=0 FollowLog=0 NoLogDump=0 UseConfigWrapper=1 Force=0
 
@@ -1346,8 +1430,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--nowrap' )                 UseConfigWrapper=0 ;;
 			( '--precfg='* )               PrependConfigFiles=( "${PrependConfigFiles[@]}" "${Param#--*=}" ) ;;
 			( '--include='* )              AppendConfigFiles=( "${AppendConfigFiles[@]}" "${Param#--*=}" ) ;;
-			( '--inject='* )               AppendConfigLines+=( "${Param#--*=}" ) ;;
-			( '--inject-'*=* )             AppendConfigLines+=( ">${Param#--inject-}" ) ;;
+			( '--inject='* |  '--inject-'*=*) scheduleConfigLineInjection "$Param" ;;
 			( '--seedfromevents' )         SeedFromEvents="rns" ;;
 			( '--seedfromevents='* )       SeedFromEvents="${Param#--*=}" ;;
 			( '--seedfromfile='* )
@@ -1747,6 +1830,26 @@ if isFlagSet UseConfigWrapper ; then
 	# ******************************************************************************
 	EOH
 	
+	if [[ "${#PrependConfigLines[@]}" -gt 0 ]]; then
+		# funny fact: this must be in the prolog (in sane configurations at least)
+		cat <<-EOI >> "$WrappedConfigPath"
+		
+		# including additional configuration from command line (prepended):
+		
+		BEGIN_PROLOG
+		
+		EOI
+		
+		for ConfigLine in "${PrependConfigLines[@]}" ; do
+			configLineToBeInjected "$ConfigLine" >> "$WrappedConfigPath"
+		done
+		
+		cat <<-EOI >> "$WrappedConfigPath"
+		
+		END_PROLOG
+		EOI
+	fi
+	
 	if [[ "${#PrependConfigPaths[@]}" -gt 0 ]]; then
 		cat <<-EOI >> "$WrappedConfigPath"
 		
@@ -1799,36 +1902,11 @@ if isFlagSet UseConfigWrapper ; then
 	if [[ "${#AppendConfigLines[@]}" -gt 0 ]]; then
 		cat <<-EOI >> "$WrappedConfigPath"
 		
-		# including additional configuration from command line:
+		# including additional configuration from command line (appended):
 		EOI
 		
 		for ConfigLine in "${AppendConfigLines[@]}" ; do
-			DBGN 1 "Processing injected config line: '${ConfigLine}'"
-			ConfigLinePrefix=''
-			if [[ "${ConfigLine:0:1}" == '>' ]]; then # check for internal marker
-				ConfigLineTag="${ConfigLine%%=*}"
-				ConfigLineTag="${ConfigLineTag:1}"
-				ConfigLine="${ConfigLine#*=}"
-				DBGN 2 " => it's special, of type '${ConfigLineTag}' (\"${ConfigLine}\")"
-				case "$ConfigLineTag" in
-					( 'service' ) # in `services`
-						ConfigLinePrefix="${ConfigLineTag}s."
-						;;
-					( 'producer' | 'analyzer' | 'filter' ) # in `physics.*`
-						ConfigLinePrefix="physics.${ConfigLineTag}s."
-						;;
-					( 'source' ) # in `source`
-						ConfigLinePrefix="${ConfigLineTag}."
-						;;
-					( 'output' ) # in `outputs`
-						ConfigLinePrefix="${ConfigLineTag}s."
-						;;
-					( * )
-						FATAL 1 "Type '${ConfigLineTag}' of configuration line to be injected is not known."
-						;;
-				esac
-			fi
-			echo "${ConfigLinePrefix}${ConfigLine}" >> "$WrappedConfigPath"
+			configLineToBeInjected "$ConfigLine" >> "$WrappedConfigPath"
 		done
 	fi
 	
