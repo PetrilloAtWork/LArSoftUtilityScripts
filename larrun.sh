@@ -102,12 +102,14 @@
 #     added support for output labels in output parameters
 # 1.42 (petrillo@slac.stanford.edu)
 #     added support for injecting lines at the beginning of configuration
+# 1.43 (petrillo@slac.stanford.edu)
+#     added `--wait` option
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.42"
+SCRIPTVERSION="1.43"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -184,6 +186,8 @@ function help() {
 	    dumping the log on the screen in the meanwhile
 	--nologdump
 	    when running in foreground, don't dumb the log on screen
+	--wait
+	    equivalent to \`--fg --nologdump\`: quietly waits the end of execution
 	--noconfigdump
 	    skip the configuration dump creation
 	--inline , --nosandbox
@@ -1418,6 +1422,7 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--core' )                   CoreSize="$DefaultCoreSize" ;;
 			( '--core='* )                 CoreSize="${Param#--*=}" ;;
 			( '--follow' | '-f' )          FollowLog=1 ;;
+			( '--wait' | '-w' )            NOBG=1 ; NoLogDump=1 ;;
 			( '--nologdump' )              NoLogDump=1 ;;
 			( '--noconfigdump' )           DumpConfigMode="No" ;;
 			( '--onlyconfigdump' )         DumpConfigMode="Only" ;;
@@ -2090,7 +2095,7 @@ if isFlagSet NOBG && [[ -n "$LarPID" ]]; then
 	# bonus: print the log
 	LogPID=""
 	if ! isFlagSet NoLogDump ; then
-		( tailf "$AbsoluteLogPath" 2> /dev/null )&
+		( tail -f "$AbsoluteLogPath" 2> /dev/null )&
 		LogPID="$!"
 	fi
 	

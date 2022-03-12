@@ -157,6 +157,6 @@ for LogFile in "${LogFiles[@]}" ; do
 done
 
 if [[ $nErrors -gt 0 ]]; then
-	ERROR "Run with ${nError} error(s)."
+	ERROR "Run with ${nErrors} error(s)."
 fi
 exit $nErrors
