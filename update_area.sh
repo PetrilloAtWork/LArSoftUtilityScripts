@@ -14,6 +14,8 @@
 #     updated the list of packages not to learn current version from
 # 20191212 (petrillo@slac.stanford.edu) [v1.4]
 #     updated the list of packages not to learn current version from
+# 20211108 (petrillo@slac.stanford.edu) [v1.5]
+#     package version extracted primarily from CMakeLists.txt
 # 
 
 
@@ -25,7 +27,7 @@ fi
 ( # subshell, protect from sourcing
 
 SCRIPTNAME="$(basename -- "$0")"
-SCRIPTVERSION="1.4"
+SCRIPTVERSION="1.5"
 
 declare -ar SkipRepositories=(
   'ubutil'
@@ -284,6 +286,85 @@ function SortVersions() {
 } # SortVersions()
 
 
+function UPSversionToCMake() {
+  # 'v01_02_03_04_spec' -> '01.02.03.04.spec'
+  # (not sure if the treatment of the version components fourth and beyond
+  #  are correct, as well as the treatment of the special tag at the end)
+  
+  local Version="$1"
+  
+  Version="${Version#v}"
+  Version="${Version//_/.}"
+  
+  echo "$Version"
+} # UPSversionToCMake()
+
+
+function CMakeToUPSversion() {
+  # '01.02.03.04.spec' -> 'v01_02_03_04_spec'
+  # (not sure if the treatment of the version components fourth and beyond
+  #  are correct, as well as the treatment of the special tag at the end)
+  
+  local Version="$1"
+  
+  Version="${Version//./_}"
+  Version="v${Version#v}"
+  
+  echo "$Version"
+} # CMakeToUPSversion()
+
+
+function DetectRepositoryVersion() {
+  
+  local RepoPath="$1"
+  if [[ ! -d "$RepoPath" ]]; then
+    DBGN 2 "No repository at '${RepoPath}'."
+    return 3
+  fi
+  
+  local Version=''
+  
+  #
+  # from CMakeLists.txt: expect a line `project(PackageName [...] VERSION 
+  #
+  CMakeLists="${RepoPath}/CMakeLists.txt"
+  if [[ ! -r "$CMakeLists" ]]; then
+    DBGN 2 "No master 'CMakeLists.txt' found ('${CMakeLists}')."
+    return 3
+  fi
+  
+  # remove comments, and keep only the last `project()` directive
+  local ProjectLine="$(sed -e 's/[[:blank:]]\+#.*//g' "$CMakeLists" | grep -wi project | tail -n 1)"
+  
+  local -r Pattern='project[[:space:]]*\(.* VERSION ([^ ]*).*\)'
+  local OldNocasematch=0
+  shopt nocasematch >& /dev/null && OldNocasematch=1 # save current setting
+  shopt -s nocasematch
+  [[ "$ProjectLine" =~ $Pattern ]] && Version="${BASH_REMATCH[1]}"
+  [[ OldNocasematch == 0 ]] && shopt -u nocasematch # restore previous setting
+  DBGN 3 "Version of '${RepoPath}' => '${Version}' (from '${ProjectLine}' in CMakeLists.txt)"
+  
+  [[ -n "$Version" ]] && CMakeToUPSversion "$Version" && return 0
+  
+  #
+  # from product_deps: expect a line "parent PackageName [Version]"
+  #
+  ProductDeps="${RepoPath}/ups/product_deps"
+  if [[ ! -d "$ProductDeps" ]]; then
+    DBGN 2 "No 'product_deps' found('${ProductDeps}')."
+    return 3
+  fi
+  
+  Version="$(grep -h -e '^parent' "$ProductDeps" | awk '{ print $3 ; }')"
+  DBGN 3 "Version of '${RepoPath}' => '${Version}' (from product_deps)"
+  
+  [[ -n "$Version" ]] && echo "$Version" && return 0
+  DBGN 2 "No version discovered for '${RepoPath}'."
+  return 1
+  
+} # DetectRepositoryVersion()
+
+
 function DetectLatestVersion() {
   # prints the highest version among the packages matching a filter
   local Filter="$1"
@@ -294,10 +375,10 @@ function DetectLatestVersion() {
       DBGN 3 " - skip '${PackageName}' (filtered out)"
       continue
     fi
-    ProductDeps="${PackageDir}/ups/product_deps"
-    DBGN 3 " - check '${PackageName}' ('${ProductDeps}')"
-    [[ -r "$ProductDeps" ]] && echo "$ProductDeps"
-  done | xargs grep -h -e '^parent' | awk '{ print $3 ; }' | SortVersions
+    
+    DBGN 3 " - check '${PackageName}'"
+    DetectRepositoryVersion "$PackageDir"
+  done | SortVersions
 } # DetectLatestVersion()
 
 
@@ -406,6 +487,7 @@ while [[ -z "$Version" ]]; do
   DBG "Latest version among all sources: ${Version:-not found}"
   [[ -n "$Version" ]] && break
   
+  break
 done
 [[ -z "$Version" ]] && FATAL 1 "I don't know which version to set up!"
 
