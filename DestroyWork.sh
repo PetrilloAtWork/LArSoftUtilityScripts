@@ -176,23 +176,24 @@ for (( iDir = 0 ; iDir < NDirs ; ++iDir )); do
 	Area="${Dirs[iDir]}"
 	{ [[ $NDirs == 0 ]] && isFlagSet DOIT ; } || echo " --- ${Area} --- "
 	
-	Target="${Area}.log"
-	if [[ -w "$Target" ]]; then
-		if isFlagSet DOIT ; then
-			rm -v "$Target"
+	for Target in "${Area}.log"* ; do
+		if [[ -w "$Target" ]]; then
+			if isFlagSet DOIT ; then
+				rm -v "$Target"
+			else
+				ls "$Target"
+			fi
+		elif [[ -d "$Target" ]]; then
+			ERROR "'${Target}' is a directory!"
+			let ++nErrors
+		elif [[ -e "$Target" ]]; then
+			ERROR "'${Target}' can't be deleted."
+			let ++nErrors
 		else
-			ls "$Target"
+			ERROR "'${Target}' does not exist."
+			let ++nErrors
 		fi
-	elif [[ -d "$Target" ]]; then
-		ERROR "'${Target}' is a directory!"
-		let ++nErrors
-	elif [[ -e "$Target" ]]; then
-		ERROR "'${Target}' can't be deleted."
-		let ++nErrors
-	else
-		ERROR "'${Target}' does not exist."
-		let ++nErrors
-	fi
+	done
 	
 	Target="$Area"
 	if [[ ! -e "$Target" ]]; then

@@ -104,6 +104,8 @@
 #     added support for injecting lines at the beginning of configuration
 # 1.43 (petrillo@slac.stanford.edu)
 #     added `--wait` option
+# 1.44 (petrillo@slac.stanford.edu)
+#     added `--compresslog` option
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
@@ -141,6 +143,9 @@ DATETAG="$(date '+%Y%m%d')"
 : ${DefaultProfileTime:="$((7 * 24 * 3600))s"}
 # period of sampling (iprofiler): 10 ms
 : ${DefaultProfileSamplingPeriod:="10ms"}
+
+# default compression format used when log compression is requested
+declare -r DefaultLogCompressionFormat='gzip'
 
 declare -i NPostProcessWriters=0
 
@@ -196,6 +201,10 @@ function help() {
 	--followlog , -f
 	    after starting, prints the output log on the screen; <Ctrl>+<C> will
 	    stop following the log, but the job will continue to the end
+	--compresslog[=format]
+	    the main log file is compressed in real time using the specified format;
+	    an empty \`format\` means no compression; supported compression formats
+	    are \`gzip\` (default if no \`format\` is specified here) and \`bzip2\`.
 	--jobname=JOBNAME
 	    the label for this job (the output directory and log file are named after
 	    it)
@@ -507,7 +516,7 @@ function MakePathListAbsolute() {
 
 
 function FindNextFile() {
-	# Prints the next available log file with the specified base name and suffix
+	# Prints the next available file/directory with the specified base name and suffix
 	local BasePath="$1"
 	local Suffix="$2"
 	local -i IndexPadding="${3:-${PaddingDefault}}"
@@ -530,10 +539,14 @@ function FindNextLogFile() {
 	# Prints the next available log file with the specified base name
 	# The log path is in the form:
 	# logs/ConfigBaseName_Date-##.fcl
-	local ConfigBaseName="${1%".fcl"}"
-	local -i IndexPadding="${2:-${PaddingDefault}}"
+	local JobName="${1%".fcl"}"
+	local ExtraSuffix="$2"
+	local -i IndexPadding="${3:-${PaddingDefault}}"
 	
-	FindNextFile "logs/${ConfigBaseName}/${DATETAG}" '.log' "$IndexPadding" $MAXLOGS
+	local NextLogDir
+	NextLogDir="$(FindNextFile "logs/${JobName}/${DATETAG}" '' "$IndexPadding" $MAXLOGS)"
+	LASTFATAL "Failed to find an available log file for job name '${JobName}' (${MAXLOGS} attempts)."
+	echo "${NextLogDir}.log${ExtraSuffix}"
 } # FindNextLogFile()
 
 
@@ -663,9 +676,63 @@ function IgProfReport() {
 } # IgProfReport
 
 
+function CompressStream() {
+	local Format="$1"
+
+	case "$Format" in
+		( gzip | gz | zcat | *.gz )
+			Format='gzip'
+			gzip --stdout
+			;;
+		( bzip2 | bz2 | bz | bzcat | *.bz2 )
+			Format='bzip2'
+			bzip2 --compress --stdout
+			;;
+		( * )
+			Format=''
+			cat
+			;;
+	esac
+	
+} # CompressStream()
+
+
+function CompressionSuffix() {
+	local Spec="$1"
+	
+	local Suffix
+	case "${Spec,,}" in
+		( gzip | gz | zcat | *.gz )          Suffix='.gz'  ;;
+		( bzip2 | bz2 | bz | bzcat | *.bz2 ) Suffix='.bz2' ;;
+		( '' | log | .log | txt | .txt )     Suffix='' ;;
+		( * ) LASTFATAL "Unknown compression specification: '${Spec}'"
+	esac
+	echo "$Suffix"
+	
+} # CompressionSuffix()
+
+
+function UncompressStream() {
+	local Format="$1"
+
+	case "$Format" in
+		( gzip | gz | zcat | *.gz )
+			gzcat
+			;;
+		( bzip2 | bz2 | bz | bzcat | *.bz2 )
+			bzcat
+			;;
+		( * )
+			cat
+			;;
+	esac
+	
+} # UncompressStream()
+
+
 function CompressFile_gzip() {
 	local File="$1"
-	echo "gzipi -v '${File}'"
+	echo "gzip -v '${File}'"
 }
 
 function CompressFile_bzip2() {
@@ -699,6 +766,15 @@ function CompressFiles() {
 		"CompressFile_${Format}" "$Source"
 	done
 } # CompressFiles()
+
+
+function CompressLogStream() { CompressStream "$LogSuffix" ; }
+
+function AppendToLog() {
+	[[ -n "$AbsoluteLogPath" ]] || FATAL 1 "Internal error: no log file defined yet."
+	CompressLogStream >> "$AbsoluteLogPath"
+	LASTFATAL "Error writing to the log file '${AbsoluteLogPath}'."
+} # AppendToLog()
 
 
 function SetProfiler() {
@@ -1421,6 +1497,8 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
 			( '--sandbox' )                SANDBOX=1 ;;
 			( '--core' )                   CoreSize="$DefaultCoreSize" ;;
 			( '--core='* )                 CoreSize="${Param#--*=}" ;;
+			( '--compresslog' | '-z' )     LogCompressionFormat="$DefaultLogCompressionFormat" ;;
+			( '--compresslog='* )          LogCompressionFormat="${Param#--*=}" ;;
 			( '--follow' | '-f' )          FollowLog=1 ;;
 			( '--wait' | '-w' )            NOBG=1 ; NoLogDump=1 ;;
 			( '--nologdump' )              NoLogDump=1 ;;
@@ -1615,7 +1693,6 @@ fi
 
 [[ -n "$ExitCode" ]] && exit $ExitCode
 
-
 [[ -n "$CoreSize" ]] && SetCoreSize "$CoreSize"
 
 
@@ -1669,10 +1746,13 @@ if [[ -z "$FullConfigPath" ]]; then
 	fi
 fi
 
+declare LogSuffix="$(CompressionSuffix "$LogCompressionFormat")"
+
 declare LogPath
-LogPath="$(FindNextLogFile "$JobBaseName")"
-LASTFATAL "Failed to find a suitable log file name for ${JobBaseName}!"
-declare JobTag="$(basename "${LogPath%.log}")"
+LogPath="$(FindNextLogFile "$JobBaseName" "$LogSuffix")" # this is the path to the link
+LASTFATAL "Internal error: failed to find a suitable log file name for ${JobBaseName}!"
+
+declare JobTag="$(basename "${LogPath%.log${LogSuffix}}")"
 
 declare JobName="${JobBaseName}-${JobTag}"
 
@@ -1746,12 +1826,12 @@ isFlagSet NoOutput && LArParams+=( '--no-output' )
 declare WorkDir="."
 if isFlagSet SANDBOX ; then
 # 	declare WorkDir="$(mktemp -d "workdir_${JobName}_XXXXXX" )"
-	WorkDir="${LogPath%.log}"
+	WorkDir="${LogPath%.log${LogSuffix}}"
 	mkdir -p "$WorkDir"
 	
 	# we want the actual log file to be in the sandbox;
 	# for convenience, it will be linked by the one outside the box
-	declare RealLogPath="${WorkDir}/${JobName}.log"
+	declare RealLogPath="${WorkDir}/${JobName}.log${LogSuffix}"
 	mv "$LogPath" "$RealLogPath"
 	ln -s "$(basename "$WorkDir")/$(basename "$RealLogPath")" "$LogPath"
 	
@@ -2004,7 +2084,7 @@ trap InterruptHandler SIGINT
 # communicate what's going on, and exit
 #
 echo "$(date) --- starting ---------------------------------------------------"
-cat <<EOM > "$AbsoluteLogPath"
+cat <<EOM | AppendToLog
 ================================================================================
 Script:       ${SCRIPTNAME} version ${SCRIPTVERSION:-"unknown"}
 Job name:    '${JobName}'
@@ -2020,8 +2100,8 @@ for (( iSourceEntry=0 ; iSourceEntry < $nSources ; ++iSourceEntry )); do
 		echo -n " file"
 	fi
 	echo " '${SourceEntry}'"
-done >> "$AbsoluteLogPath"
-cat <<EOM >> "$AbsoluteLogPath"
+done | AppendToLog
+cat <<EOM | AppendToLog
 Host:         $(hostname)
 Directory:    $(pwd)
 Executing:    ${Command[@]}
@@ -2031,30 +2111,30 @@ Run with:     ${0} ${@}
 EOM
 if [[ "${#PrependConfigPaths[@]}" -gt 0 ]]; then
 	let -i iFile=0
-	echo "Prepended:   \"${PrependConfigPaths[iFile++]}\"" >> "$AbsoluteLogPath"
+	echo "Prepended:   \"${PrependConfigPaths[iFile++]}\"" | AppendToLog
 	while [[ $iFile -lt "${#PrependConfigPaths[@]}" ]]; do
-		echo "             \"${PrependConfigPaths[iFile++]}\"" >> "$AbsoluteLogPath"
-	done
+		echo "             \"${PrependConfigPaths[iFile++]}\""
+	done | AppendToLog
 fi
 if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
 	let -i iFile=0
-	echo "Appended:    \"${AppendConfigPaths[iFile++]}\"" >> "$AbsoluteLogPath"
+	echo "Appended:    \"${AppendConfigPaths[iFile++]}\"" | AppendToLog
 	while [[ $iFile -lt "${#AppendConfigPaths[@]}" ]]; do
-		echo "             \"${AppendConfigPaths[iFile++]}\"" >> "$AbsoluteLogPath"
-	done
+		echo "             \"${AppendConfigPaths[iFile++]}\""
+	done | AppendToLog
 fi
 if [[ "${#AppendConfigPaths[@]}" -gt 0 ]]; then
 	let -i iFile=0
-	echo "Additional configuration:" >> "$AbsoluteLogPath"
+	echo "Additional configuration:" | AppendToLog
 	for ConfigLine in "${#AppendConfigLines[@]}" ; do
-		echo "    ${ConfigLine}" >> "$AbsoluteLogPath"
-	done
+		echo "    ${ConfigLine}"
+	done | AppendToLog
 fi
 if [[ -n "$NewProcessName" ]]; then
-  echo "Process name overridden: '${NewProcessName}'" >> "$AbsoluteLogPath"
+  echo "Process name overridden: '${NewProcessName}'" | AppendToLog
 fi
 
-[[ "$DumpConfigMode" != "No" ]] && echo "Configuration dump into: '${DebugConfigFile}'" >> "$AbsoluteLogPath"
+[[ "$DumpConfigMode" != "No" ]] && echo "Configuration dump into: '${DebugConfigFile}'" | AppendToLog
 
 # print environment variables:
 {
@@ -2062,9 +2142,9 @@ fi
 	PathListVar FHICL_FILE_PATH | sed -e 's/^/  /' 
 	echo "Framework data search path (FW_SEARCH_PATH):"
 	PathListVar FW_SEARCH_PATH | sed -e 's/^/  /' 
-} >> "$AbsoluteLogPath"
+} | AppendToLog
 
-cat <<EOM >> "$AbsoluteLogPath"
+cat <<EOM | AppendToLog
 ================================================================================
 $(PrintPackageVersions)
 ================================================================================
@@ -2079,7 +2159,7 @@ export FHICL_FILE_PATH # be sure it is clear...
 unset ART_DEBUG_CONFIG
 declare LarPID
 if isFlagUnset DontRun ; then
-	"${Command[@]}" >> "$AbsoluteLogPath" 2>&1 &
+	"${Command[@]}" 2>&1 | AppendToLog &
 	LarPID="$!"
 fi
 cat <<EOM
@@ -2095,7 +2175,7 @@ if isFlagSet NOBG && [[ -n "$LarPID" ]]; then
 	# bonus: print the log
 	LogPID=""
 	if ! isFlagSet NoLogDump ; then
-		( tail -f "$AbsoluteLogPath" 2> /dev/null )&
+		( tail -f "$AbsoluteLogPath" | UncompressStream "$AbsoluteLogPath" | 2> /dev/null )&
 		LogPID="$!"
 	fi
 	
@@ -2114,7 +2194,7 @@ fi
 isFlagSet SANDBOX && popd > /dev/null
 
 if isFlagSet FollowLog ; then
-	if [[ -r "$LogPath" ]] ; then
+	if [[ -r "$AbsoluteLogPath" ]] ; then
 		cat <<-EOM
 		++===========================================================================++
 		||  Stop following by hitting <Ctrl>+<C>; job will not be stopped.           ||
@@ -2124,8 +2204,7 @@ if isFlagSet FollowLog ; then
 		# set Interrupt signal handler
 		trap TailInterruptHandler SIGINT
 		
-		tailf "$LogPath" &
-M
+		tail -f "$AbsoluteLogPath" | UncompressStream "$AbsoluteLogPath" &
 		TailPID="$!"
 		wait "$TailPID"
 		# reset to default the Interrupt signal handler
