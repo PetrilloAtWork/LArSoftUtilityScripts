@@ -732,12 +732,12 @@ function UncompressStream() {
 
 function CompressFile_gzip() {
 	local File="$1"
-	echo "gzip -v '${File}'"
+	echo "gzip -v -- '${File}'"
 }
 
 function CompressFile_bzip2() {
 	local File="$1"
-	echo "bzip2 -v '${File}'"
+	echo "bzip2 -v -- '${File}'"
 }
 
 
@@ -837,6 +837,7 @@ function SetupProfiler() {
 					# these are the files which will be created...
 					LogOutputFile="${JobName}-${ToolOption}.log"
 					MachineOutputFile="${JobName}-${ToolOption}.xml"
+					XTreeCheckFile="${JobName}-${ToolOption}.kcg"
 					
 					PrependExecutableParameters=( "${ProfilerToolParams[@]}"
 						"--tool=${ToolOption}"
@@ -844,6 +845,7 @@ function SetupProfiler() {
 					# valgrind (at least up to 3.12) produces XML or plain text, not both
 					#	"--xml=yes" "--xml-file=${MachineOutputFile}" # generate XML output and write it file
 						"--log-file=${LogOutputFile}" # send the plain text output to a second file
+						"--xtree-memory=full" "--xtree-memory-file=${XTreeCheckFile}" # another output format: cachegrind
 						'--child-silent-after-fork=yes' # do not trace child (fork()ed) processes
 						'--track-origins=yes'
 						'--num-callers=50' # stack trace depth (50 should be enough for lar jobs)
@@ -854,21 +856,24 @@ function SetupProfiler() {
 					if [[ -r "$ROOTSupp" ]]; then
 						PrependExecutableParameters=( "${PrependExecutableParameters[@]}" "--suppressions=${ROOTSupp}" )
 					fi
+					AddPostProcessWriter CompressFiles "${MachineOutputFile}.bz2" "${XTreeMemoryFile}.bz2"
 					;;
 				( 'massif' )
 					StacksSupport=1
 					ToolOption="$ProfilerTool"
 					OutputFile="${JobName}-${ToolOption}.out"
+					XTreeMemoryFile="${JobName}-${ToolOption}.kcg"
 					PrependExecutableParameters=( "${ProfilerToolParams[@]}"
 						"--tool=${ToolOption}"
 						"--massif-out-file=${OutputFile}"
+						"--xtree-memory=full" "--xtree-memory-file=${XTreeMemoryFile}"
 						${MASSIF_MAXSNAPSHOTS:+"--max-snapshots=${MASSIF_MAXSNAPSHOTS}"}
 						${MASSIF_DETAILEDFREQ:+"--detailed-freq=${MASSIF_DETAILEDFREQ}"}
 						${MASSIF_MEMTHR:+"--threshold=${MASSIF_MEMTHR}"}
 						)
 					isFlagSet DoStackProfiling && PrependExecutableParameters=( "${PrependExecutableParameters[@]}" '--stacks=yes' )
 					isFlagSet DoMMapProfiling && PrependExecutableParameters=( "${PrependExecutableParameters[@]}" '--pages-as-heap=yes' )
-					AddPostProcessWriter CompressFiles "${OutputFile}.bz2"
+					AddPostProcessWriter CompressFiles "${OutputFile}.bz2" "${XTreeMemoryFile}.bz2"
 					;;
 				( 'dhat' )
 					ToolOption="exp-dhat"
