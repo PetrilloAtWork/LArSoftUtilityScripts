@@ -217,6 +217,9 @@ EOS
       unset MRB_INSTALL
     fi
   fi
+  
+  # for some reasons `cetpkgsupport` always interferes with a following `mrbsetenv`
+  unsetup cetpkgsupport
 
   mkdir -p "logs" "job"
   cd "srcs"
