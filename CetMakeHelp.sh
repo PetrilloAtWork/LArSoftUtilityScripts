@@ -7,7 +7,7 @@ SCRIPTNAME="$(basename "$0")"
 SCRIPTDIR="$(dirname "$0")"
 SCRIPTVERSION="1.2"
 
-[[ "${#DEFAULTPACKAGES[@]}" == 0 ]] && DEFAULTPACKAGES=( 'cetbuildtools' 'art' )
+[[ "${#DEFAULTPACKAGES[@]}" == 0 ]] && DEFAULTPACKAGES=( 'cetbuildtools' 'art' 'canvas_root_io' )
 
 
 ###############################################################################
