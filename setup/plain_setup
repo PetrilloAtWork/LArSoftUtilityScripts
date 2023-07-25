@@ -217,11 +217,15 @@ function DoPlainSetup() {
 			if [[ "$setup_base_script" == ":golocal:" ]]; then
 				# this is experiment-agnostic setup:
 				echo " * local LArSoft setup"
-				# hope "Setup UPS_local"  and "Setup UPS_AllLArSoft" mean something in your system...
+				# hope "Setup UPS_local", "Setup UPS_Expt" and "Setup UPS_AllLArSoft" mean something in your system...
 				
 				# adding experiment-specific repositories from CVMFS as low priority
 				let ++nOutput
-				Setup UPS_AllLArSoft  >& >(sed -e "s/^/    [${nOutput}> /")
+				Setup UPS_Expt  >& >(sed -e "s/^/    [${nOutput}> /")
+				if [[ $res != 0 ]]; then
+					let ++nOutput
+					Setup UPS_AllLArSoft  >& >(sed -e "s/^/    [${nOutput}> /")
+				fi
 				# local, if exists, takes the highest priority
 				let ++nOutput
 				Setup UPS_local  >& >(sed -e "s/^/    [${nOutput}> /")
