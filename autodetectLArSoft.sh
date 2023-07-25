@@ -14,7 +14,7 @@ declare SCRIPTDIR="$(dirname "$0")"
 
 declare DEFAULTSFILE="${SCRIPTDIR}/setup/defaults"
 
-declare -r VersionPattern='v[[:digit:]]+_[[:digit:]]+(_[[:digit:]]+)?(_[[:digit:]]+)?$'
+declare -r VersionPattern='v[[:digit:]]+_[[:digit:]]+(_[[:digit:]]+)?(_[[:digit:]]+)?(p[[:digit:]]+)?$'
 
 ################################################################################
 ###  Format tags
@@ -324,7 +324,7 @@ function FindPackageVersion() {
 	local PackageName="$1"
 	local PackageVersion="$2"
 	
-	# look in the source directory for the current version ofthe specified package
+	# look in the source directory for the current version of the specified package
 	local DetectedPackageVersion="$(PackageSourceVersion "$PackageName")"
 	
 	if [[ -z "$DetectedPackageVersion" ]]; then # if we can't find any version...
@@ -333,7 +333,7 @@ function FindPackageVersion() {
 		DetectedPackageVersion="$(FindPreviousLocalProductVersion "$PackageName" "$PackageVersion")"
 	fi
 	
-	# if no version could be found don't print aything
+	# if no version could be found don't print anything
 	echo "$DetectedPackageVersion"
 } # FindPackageVersion()
 
