@@ -98,7 +98,7 @@ function AddUpstreamRepository() {
 	#
 	# fetch everything
 	#
-	git fetch --multiple "$ORIGINNAME" "$UPSTREAM" >&2
+	git fetch --multiple "$ORIGINNAME" "$UPSTREAMNAME" >&2
 	res=$?
 	[[ $res != 0 ]] && Msg="${Msg:+"${Msg}; fetching returned error code ${res}"}"
 	

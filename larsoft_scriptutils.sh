@@ -1056,7 +1056,7 @@ function isMRBSourceArea() {
     Dir="$(MakeAbsolutePath "$Dir")"
     while [[ "$Dir" != '/' ]]; do
       [[ -r "${Dir}/.mrbversion" ]] && [[ -r "${Dir}/.cmake_add_subdir" ]] && return 0
-      Dir="$(basename "$Dir")"
+      Dir="$(dirname "$Dir")"
     done
     return 1
   fi
@@ -1082,7 +1082,7 @@ function isMRBBuildArea() {
     Dir="$(MakeAbsolutePath "$Dir")"
     while [[ "$Dir" != '/' ]]; do
       [[ -r "${Dir}/cetpkg_variable_report" ]] && return 0
-      Dir="$(basename "$Dir")"
+      Dir="$(dirname "$Dir")"
     done
     return 1
   fi
@@ -1109,7 +1109,7 @@ function isMRBInstallArea() {
     Dir="$(MakeAbsolutePath "$Dir")"
     while [[ "$Dir" != '/' ]]; do
       [[ -r "${Dir}/.mrbversion" ]] && [[ -d "${Dir}/.upsfiles" ]] && return 0
-      Dir="$(basename "$Dir")"
+      Dir="$(dirname "$Dir")"
     done
     return 1
   fi
