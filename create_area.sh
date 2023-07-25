@@ -154,21 +154,21 @@ EOM
     return 1
   fi
 
-  # check that UPS is set up
-  CheckSetup || return $?
-
-  echo "Creating working area: '${NewAreaPath}'"
-
 
   ###
   ### set up
   ###
   source "${SCRIPTDIR}/setup/setup" "base" "$Version" "$Qualifiers"
 
+  # check that UPS is set up
+  CheckSetup || return $?
+
 
   ###
   ### creation of the new area
   ###
+  echo "Creating working area: '${NewAreaPath}'"
+
   if [[ -d "$NewAreaPath" ]]; then
     echo "The working area '${NewAreaPath}' already exists." >&2
     cd "$NewAreaPath"
@@ -221,7 +221,7 @@ EOS
   # for some reasons `cetpkgsupport` always interferes with a following `mrbsetenv`
   unsetup cetpkgsupport
 
-  mkdir -p "logs" "job"
+  mkdir -p 'logs' 'jobs' 'testbox' 'input/filelists'
   cd "srcs"
 
   ###
