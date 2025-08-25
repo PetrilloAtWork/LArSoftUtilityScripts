@@ -53,11 +53,26 @@ function ExtractUPSPackageVersion() {
 function ExtractPackageVersionFromCMake() {
   local CMakeListsFile="${1:-"CMakeLists.txt"}"
   local PackageName="$2" # unused
-  local ProjectLine="$(grep -E '\bproject *\(' "$CMakeListsFile" | tail -n 1)"
   
-  [[ "$ProjectLine" =~ VERSION\ +${VersionPattern} ]] || return 1
-  
-  echo "${BASH_REMATCH[1]}"
+  local Version
+  # canonical: check CMake project() macro
+  if [[ -z "$Version" ]]; then
+    local ProjectLine="$(grep -E '(^|[^[:alnum:]])project *\(' "$CMakeListsFile" | tail -n 1)"
+    [[ "$ProjectLine" =~ VERSION\ +${VersionPattern} ]] && Version="${BASH_REMATCH[1]}"
+  fi
+  # special: if the version tag is not CMake-compliant, we may need to brutally override it
+  if [[ -z "$Version" ]]; then
+    # programmatically, there are (too) many ways to set that variable;
+    # we assume the simple pattern:
+    #   set(<project name>_CMAKE_PROJECT_VERSION_STRING <version>)
+    # where <project name> is left unconstrained
+    local SetVersionLine="$(grep -E '(^|[^[:alnum:]])set.+_CMAKE_PROJECT_VERSION_STRING' "$CMakeListsFile" | tail -n 1)"
+    [[ "$SetVersionLine" =~ _CMAKE_PROJECT_VERSION_STRING\ ${VersionPattern} ]] && Version="${BASH_REMATCH[1]}"
+  fi  
+
+  [[ -n "$Version" ]] || return 1
+  echo "$Version"
+
 } # ExtractPackageVersionFromCMake()
 
 
