@@ -33,7 +33,9 @@ declare -r VersionPattern="(v?${VersionAtom}${SepAtom}${VersionAtom}(${SepAtom}$
 
 declare -Ar MainDependencies=(
   ['sbnobj']='lardataobj'
-  ['icarusalg']='larsoftobj'
+  ['sbnalg']='sbnobj'
+  ['sbncode']='sbnalg'
+  ['icarusalg']='sbnalg'
   ['icaruscode']='sbncode'
   ['sbndcode']='sbncode'
 )
