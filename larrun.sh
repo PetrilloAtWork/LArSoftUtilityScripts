@@ -106,12 +106,18 @@
 #     added `--wait` option
 # 1.44 (petrillo@slac.stanford.edu)
 #     added `--compresslog` option
+# 1.45 (petrillo@slac.stanford.edu)
+#     MAXLOGS value reflects the padding in use
+# 1.46 (petrillo@slac.stanford.edu)
+#     added ICARUS dependent packages in the `OptionalPackages` list
+# 1.47 (petrillo@slac.stanford.edu)
+#     added setup of valgrind from UPS
 # 1.xx (petrillo@fnal.gov)
 #     added option to follow the output of the job; currently buggy
 #
 
 SCRIPTNAME="$(basename "$0")"
-SCRIPTVERSION="1.43"
+SCRIPTVERSION="1.47"
 CWD="$(pwd)"
 
 DATETAG="$(date '+%Y%m%d')"
@@ -119,8 +125,6 @@ DATETAG="$(date '+%Y%m%d')"
 # this is the maximum number of logs that we allow; negative will allow any,
 # but it's better to leave it to a reasonably large value to avoid infinite
 # loops in case of problems or bugs
-: ${MAXLOGS:="1000"}
-
 : ${SANDBOX:=1}
 : ${NOBG:=0}
 
@@ -165,7 +169,8 @@ StandardPackages=(
 )
 declare -a OptionalPackages
 OptionalPackages=(
-	uboonecode dunetpc sbndcode t962code argoneutcode lariatcode icaruscode
+	uboonecode dunetpc sbndcode t962code argoneutcode lariatcode
+	icarus_signal_processing icarusalg icaruscode
 )
 
 function help() {
@@ -829,6 +834,7 @@ function SetupProfiler() {
 			;;
 		( 'valgrind' )
 			PrependExecutable="valgrind"
+			UPSsetup 'valgrind' || LASTFATAL "Failed setting up valgrind from UPS!" # "current" version
 			
 			case $(LowerCase ProfilerTool) in
 				( 'memcheck' | '' )
@@ -937,6 +943,29 @@ function SetupProfiler() {
 	
 	return 0
 } # SetupProfiler()
+
+
+function UPSsetup() {
+	# UPSsetup product [UPS setup options]
+	
+	local ProductName="$1"
+	shift
+	local -a Args=( "$@" )
+	
+	DBG "Running UPS setup of '${ProductName}' (${Args[@]})"
+	local SetupFile
+	SetupFile="$(ups setup "$ProductName" "${Args[@]}")"
+	local res=$?
+	[[ $res == 0 ]] || return $res
+	
+	source "$SetupFile"
+	res=$?
+	[[ $res == 0 ]] || return $res
+	
+	rm -f "$SetupFile"
+	
+	return 0
+} # UPSsetup()
 
 
 function SetupCommand() {
@@ -1750,6 +1779,8 @@ if [[ -z "$FullConfigPath" ]]; then
 		FATAL 2 "Could not find the configuration file '${UserConfigPath}' (use \`--force\` to attempt running anyway)"
 	fi
 fi
+
+[[ -z "$MAXLOGS" ]] && MAXLOGS="1$(printf '%0*d' "$PaddingDefault" '')"
 
 declare LogSuffix="$(CompressionSuffix "$LogCompressionFormat")"
 
