@@ -14,7 +14,7 @@ declare SCRIPTDIR="$(dirname "$0")"
 
 declare DEFAULTSFILE="${SCRIPTDIR}/setup/defaults"
 
-declare -r VersionPattern='v[[:digit:]]+_[[:digit:]]+(_[[:digit:]]+)?(_[[:digit:]]+)?(p[[:digit:]]+)?$'
+declare -r VersionPattern='v[[:digit:]]+_[[:digit:]]+(_[[:digit:]]+)?(_[[:digit:]]+)?([pd][[:digit:]]+)?$'
 
 ################################################################################
 ###  Format tags
@@ -609,7 +609,7 @@ case "$(LowerCaseVariable Experiment)" in
 		;;
 	( 'lbne' | 'dune' )
 		Experiment="DUNE"
-		LeadingPackage="dunetpc"
+		LeadingPackage="dunesw"
 		;;
 	( 'uboone' | 'microboone' )
 		Experiment="MicroBooNE"
