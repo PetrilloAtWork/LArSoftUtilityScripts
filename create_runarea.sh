@@ -4,6 +4,20 @@
 # Run without parameters for usage instructions.
 #
 
+function _doSource() {
+	# Reminder: `source` will pass all the "current" command line arguments ($*)
+	# to the sourcing script if no additional command line argument is specified.
+	# This wrapper gives control to the caller on which the current arguments are.
+	# Also, `source "$@"` would incur into the same issue, where in case of no
+	# additional argument `source "$1"` would still add as arguments of the
+	# sourced script the arguments of the function, that is the name of the very
+	# script to be sourced, effectively resulting in `source "$1" "$1"`.
+	local ScriptName="$1"
+	shift
+	source "$ScriptName" "$@"
+} # _doSource()
+
+
 function _CanonizePath() {
 	local Path="$1"
 	local BasePath="${2:-$(pwd)}"
@@ -155,7 +169,7 @@ function create_runarea() {
 		echo "Linking the runtime setup script (and sourcing it!)"
 		rm -f 'setup'
 		ln -s "$setup_path" 'setup'
-		source './setup'
+		_doSource './setup'
 	else
 		echo "Can't find runtime setup script ('${setup_path}'): setup not linked." >&2
 	fi
@@ -167,7 +181,7 @@ function create_runarea() {
 function create_runarea_wrapper() {
 	create_runarea "$@"
 	local -i res=$?
-	unset -f _CanonizePath _DetectRunAreaPath create_runarea create_runarea_wrapper
+	unset -f _doSource _CanonizePath _DetectRunAreaPath create_runarea create_runarea_wrapper
 	return $res
 } # create_runarea_wrapper()
 
