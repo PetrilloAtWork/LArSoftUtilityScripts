@@ -384,7 +384,7 @@ function DoPlainSetup() {
 			###
 			
 			local CandidatePath
-			# set up additional configuration file paths
+			# set up additional configuration file paths (most preferred)
 			for CandidatePath in             \
 			  ${MRB_TOP:+"${MRB_TOP}/job"}   \
 			  ${MRB_TOP:+"${MRB_TOP}/jobs"}  \
@@ -393,7 +393,7 @@ function DoPlainSetup() {
 			  ;
 			do
 				[[ -d "$CandidatePath" ]] || continue
-				FHICL_FILE_PATH="${FHICL_FILE_PATH:+${FHICL_FILE_PATH}:}${CandidatePath}"
+				FHICL_FILE_PATH="${CandidatePath}${FHICL_FILE_PATH:+:${FHICL_FILE_PATH}}"
 			done
 			_PurgeDuplicatesFromPath FHICL_FILE_PATH
 			
@@ -406,7 +406,7 @@ function DoPlainSetup() {
 			  ;
 			do
 				[[ -d "$CandidatePath" ]] || continue
-				FW_SEARCH_PATH="${FW_SEARCH_PATH:+${FW_SEARCH_PATH}:}${CandidatePath}"
+				FW_SEARCH_PATH="${CandidatePath}${FW_SEARCH_PATH:+:${FW_SEARCH_PATH}}"
 			done
 			_PurgeDuplicatesFromPath FW_SEARCH_PATH
 			return
