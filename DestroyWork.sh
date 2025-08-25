@@ -177,7 +177,8 @@ for (( iDir = 0 ; iDir < NDirs ; ++iDir )); do
 	{ [[ $NDirs == 0 ]] && isFlagSet DOIT ; } || echo " --- ${Area} --- "
 	
 	for Target in "${Area}.log"* ; do
-		if [[ -w "$Target" ]]; then
+		# if target is a broken link, it fails -w and -e; we still want it removed
+		if [[ -w "$Target" ]] || [[ -L "$Target" ]]; then
 			if isFlagSet DOIT ; then
 				rm -v "$Target"
 			else
