@@ -269,7 +269,28 @@ for (( iParam = 1 ; iParam <= $# ; ++iParam )); do
     esac
   else
     NoMoreOptions=1
-    Versions[nVersions++]="$Param"
+    
+    # we support either a `version@qualifier` or a `version qual:ifier` format,
+    # and both may be followed by additional `qual:ifiers`.
+    # The presence of a '@' distinguishes a version@qualifier from a version or
+    # a qualifier; the presence of a ':' determines a qualifiers, otherwise the
+    # one of a "_" determines a version. Elements which don't have any of these
+    # three characters are considered qualifiers. To have a version be
+    # recognised even if it has no `_`, it may be ended with `@`.
+    if [[ "${Param/@}" == "$Param" ]] || [[ "${Param/:}" == "$Param" ]] && [[ "${Param/_}" != "$Param" ]]; then
+      # Param is a version, whether with or without qualifiers;
+      # however, we remove an "empty qualifier specification"
+      Versions[nVersions++]="${Param%@}"
+    else
+      # Param is a lone qualifier, to be applied to the previous version
+      [[ $nVersions -eq 0 ]] && FATAL 1 "Qualifiers must appear after the version they affect ('${Param}' does not)."
+
+      BaseVersion="${Versions[-1]%@*}"
+      # if the previous version had no qualifier this qualifier is completing it
+      # otherwise we need to add a new version@qualifier pair
+      [[ "$BaseVersion" == "${Versions[-1]}" ]] && let --nVersions
+      Versions[nVersions++]="${BaseVersion}@${Param}"
+    fi
   fi
 done
 
@@ -290,7 +311,7 @@ if [[ -r "$autodetection_script" ]] ; then
   Experiment="${autodetection[2]}"
 else
   DefaultVersion="$DefaultVersion"
-  DefaultQualifiers="${MRB_QUALS:-e20:prof}"
+  DefaultQualifiers="${MRB_QUALS:-e26:prof}"
   Experiment="LArSoft"
 fi
 DefaultOptionQualifiers="$DefaultQualifiers"
